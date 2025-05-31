@@ -5097,30 +5097,6 @@ def main():
         # Default to home page
         show_home_page()
 
-def add_developer_credit():
-    """Add discrete developer credit"""
-    st.markdown("""
-    <div style="position: fixed; 
-                bottom: 5px; 
-                right: 5px; 
-                font-size: 8px; 
-                color: #888; 
-                opacity: 0.5; 
-                z-index: 1000;
-                background: rgba(255,255,255,0.8);
-                padding: 2px 5px;
-                border-radius: 3px;">
-        Developed by Dr Merzoug Mohamed
-    </div>
-    """, unsafe_allow_html=True)
-
-def main():
-    """Main application entry point"""
-    # ... votre code existant ...
-    
-    # Add developer credit at the end
-    add_developer_credit()
-
 # Application entry point
 if __name__ == "__main__":
     main()
