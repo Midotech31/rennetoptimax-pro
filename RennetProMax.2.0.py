@@ -1,6 +1,6 @@
-﻿# RennetOptiMax_Pro_Complete_Final.py - Version Finale Complète
+﻿# RennetOptiMax_Pro_Final_Complete.py - Complete Corrected Version
 # -------------------------------------------------------------------
-# Run with: streamlit run RennetOptiMax_Pro_Complete_Final.py
+# Run with: streamlit run RennetOptiMax_Pro_Final_Complete.py
 # Requirements: pip install streamlit pandas numpy scikit-learn plotly joblib
 
 import streamlit as st
@@ -121,29 +121,6 @@ def authenticate_user(username, password):
         user_data = users[username]
         if verify_password(password, user_data['password']):
             return True, user_data
-    return False, None
-
-def demo_login(user_type='admin'):
-    """Handle demo login without password"""
-    users = load_users()
-    
-    if user_type == 'admin':
-        username = 'admin'
-    elif user_type == 'student':
-        username = 'demo_student'
-    elif user_type == 'professional':
-        username = 'demo_professional'
-    else:
-        username = 'admin'
-    
-    if username in users:
-        user_data = users[username]
-        st.session_state.authenticated = True
-        st.session_state.username = username
-        st.session_state.user_name = user_data['name']
-        st.session_state.show_login = False
-        return True, user_data
-    
     return False, None
 
 def check_user_access(username, feature):
@@ -273,7 +250,7 @@ class ExpressionOptimizer:
             'media_composition': np.random.choice(media, n_samples)
         }
         
-        # Create realistic expression levels based on literature
+        # Create realistic expression levels
         vector_weights = {
             'pET21a': 0.95, 'pET28a': 0.90, 'pET22b': 0.85, 'pBAD': 0.65,
             'pUC19': 0.40, 'pMAL-c5X': 0.80, 'pGEX-6P-1': 0.75
@@ -289,24 +266,24 @@ class ExpressionOptimizer:
         media_weights = {'LB': 0.70, 'TB': 1.0, 'M9': 0.55, 'SOC': 0.65, '2xYT': 0.85}
         media_effect = np.array([media_weights[m] for m in data['media_composition']])
         
-        # Temperature effect (optimal around 30°C for most proteins)
+        # Temperature effect
         temp_effect = 1.0 - 0.15 * abs(np.array(data['temperature']) - 30) / 15
-        temp_effect = np.maximum(temp_effect, 0.3)  # Minimum effect
+        temp_effect = np.maximum(temp_effect, 0.3)
         
-        # Induction time effect (diminishing returns after 6 hours)
+        # Time effect
         time_effect = np.minimum(np.array(data['induction_time']) / 6, 1.0)
         
-        # Inducer concentration effect (optimal around 0.5 mM)
+        # Inducer effect
         inducer_optimal = 0.5
         inducer_effect = 1.0 - 0.2 * abs(np.array(data['inducer_concentration']) - inducer_optimal)
         inducer_effect = np.maximum(inducer_effect, 0.5)
         
-        # OD600 effect (optimal around 0.6)
+        # OD effect
         od_optimal = 0.6
         od_effect = 1.0 - 0.1 * abs(np.array(data['OD600_at_induction']) - od_optimal)
         od_effect = np.maximum(od_effect, 0.7)
         
-        # Combined effect with realistic weightings
+        # Combined effect
         expression = (
             0.30 * vector_effect +
             0.25 * host_effect +
@@ -315,14 +292,14 @@ class ExpressionOptimizer:
             0.08 * time_effect +
             0.04 * inducer_effect +
             0.03 * od_effect +
-            np.random.normal(0, 0.08, n_samples)  # Biological noise
+            np.random.normal(0, 0.08, n_samples)
         )
         
-        # Scale to 0-100 with realistic distribution
+        # Scale to 0-100
         expression = np.maximum(expression, 0)
         expression = 100 * expression / np.max(expression)
         
-        # Add some low performers to make it realistic
+        # Add low performers
         low_performers = np.random.random(n_samples) < 0.1
         expression[low_performers] *= 0.3
         
@@ -338,14 +315,8 @@ class ExpressionOptimizer:
         X = data.drop('expression_level', axis=1)
         y = data['expression_level']
         
-        # Advanced preprocessing
-        numeric_transformer = Pipeline(steps=[
-            ('scaler', StandardScaler())
-        ])
-        
-        categorical_transformer = Pipeline(steps=[
-            ('onehot', OneHotEncoder(handle_unknown='ignore', sparse_output=False))
-        ])
+        numeric_transformer = Pipeline(steps=[('scaler', StandardScaler())])
+        categorical_transformer = Pipeline(steps=[('onehot', OneHotEncoder(handle_unknown='ignore', sparse_output=False))])
         
         self.preprocessor = ColumnTransformer(
             transformers=[
@@ -354,15 +325,9 @@ class ExpressionOptimizer:
             ]
         )
         
-        # Fit preprocessor and transform data
         X_processed = self.preprocessor.fit_transform(X)
+        X_train, X_test, y_train, y_test = train_test_split(X_processed, y, test_size=0.2, random_state=42)
         
-        # Split data for validation
-        X_train, X_test, y_train, y_test = train_test_split(
-            X_processed, y, test_size=0.2, random_state=42, stratify=None
-        )
-        
-        # Train advanced Random Forest model
         self.model = RandomForestRegressor(
             n_estimators=200,
             max_depth=15,
@@ -374,44 +339,19 @@ class ExpressionOptimizer:
         
         self.model.fit(X_train, y_train)
         
-        # Evaluate model performance
         train_score = self.model.score(X_train, y_train)
         test_score = self.model.score(X_test, y_test)
         
-        # Calculate additional metrics
-        train_pred = self.model.predict(X_train)
-        test_pred = self.model.predict(X_test)
-        
-        from sklearn.metrics import mean_absolute_error, mean_squared_error
-        
-        train_mae = mean_absolute_error(y_train, train_pred)
-        test_mae = mean_absolute_error(y_test, test_pred)
-        train_rmse = np.sqrt(mean_squared_error(y_train, train_pred))
-        test_rmse = np.sqrt(mean_squared_error(y_test, test_pred))
-        
-        # Save model
         self.save_model()
         
-        return {
-            'train_score': train_score,
-            'test_score': test_score,
-            'train_mae': train_mae,
-            'test_mae': test_mae,
-            'train_rmse': train_rmse,
-            'test_rmse': test_rmse,
-            'model': self.model,
-            'feature_importance': self.get_feature_importance()
-        }
+        return {'train_score': train_score, 'test_score': test_score, 'model': self.model}
     
     def save_model(self):
         """Save model to disk"""
         model_data = {
             'model': self.model,
             'preprocessor': self.preprocessor,
-            'features': {
-                'numeric': self.numeric_features,
-                'categorical': self.categorical_features
-            },
+            'features': {'numeric': self.numeric_features, 'categorical': self.categorical_features},
             'created_at': datetime.now().isoformat()
         }
         joblib.dump(model_data, self.model_path)
@@ -440,13 +380,11 @@ class ExpressionOptimizer:
             self.load_model()
             
         try:
-            # Convert input to DataFrame
             input_df = pd.DataFrame([conditions])
             
             # Ensure all required columns exist
             for feature in self.numeric_features + self.categorical_features:
                 if feature not in input_df.columns:
-                    # Set default values
                     if feature == 'temperature':
                         input_df[feature] = 30
                     elif feature == 'induction_time':
@@ -462,13 +400,10 @@ class ExpressionOptimizer:
                     elif feature == 'media_composition':
                         input_df[feature] = 'LB'
             
-            # Preprocess input
             X_input = self.preprocessor.transform(input_df)
-            
-            # Make prediction
             prediction = self.model.predict(X_input)[0]
             
-            # Get prediction confidence (using standard deviation of trees)
+            # Get confidence
             tree_predictions = np.array([tree.predict(X_input)[0] for tree in self.model.estimators_])
             confidence = 100 - (np.std(tree_predictions) / np.mean(tree_predictions) * 100)
             confidence = max(0, min(100, confidence))
@@ -482,51 +417,6 @@ class ExpressionOptimizer:
         except Exception as e:
             st.error(f"Error making prediction: {e}")
             return {'prediction': 50.0, 'confidence': 50.0, 'std_dev': 15.0}
-    
-    def get_feature_importance(self):
-        """Get detailed feature importance"""
-        if self.model is None:
-            return pd.DataFrame()
-            
-        # Get feature names from preprocessor
-        feature_names = []
-        
-        # Numeric features
-        feature_names.extend(self.numeric_features)
-        
-        # Categorical features (one-hot encoded)
-        try:
-            cat_encoder = self.preprocessor.named_transformers_['cat']['onehot']
-            cat_feature_names = cat_encoder.get_feature_names_out(self.categorical_features)
-            feature_names.extend(cat_feature_names)
-        except:
-            # Fallback if encoder doesn't support get_feature_names_out
-            for cat_feature in self.categorical_features:
-                if cat_feature == 'vector_type':
-                    vectors = ['pET21a', 'pET28a', 'pET22b', 'pBAD', 'pUC19', 'pMAL-c5X', 'pGEX-6P-1']
-                    feature_names.extend([f"{cat_feature}_{v}" for v in vectors])
-                elif cat_feature == 'host_strain':
-                    hosts = ['BL21(DE3)', 'Rosetta(DE3)', 'C41(DE3)', 'BL21(DE3)pLysS', 'DH5α', 'SHuffle T7', 'ArcticExpress(DE3)']
-                    feature_names.extend([f"{cat_feature}_{h}" for h in hosts])
-                elif cat_feature == 'media_composition':
-                    media = ['LB', 'TB', 'M9', 'SOC', '2xYT']
-                    feature_names.extend([f"{cat_feature}_{m}" for m in media])
-        
-        # Get importance values
-        importances = self.model.feature_importances_
-        
-        # Ensure matching lengths
-        min_len = min(len(feature_names), len(importances))
-        feature_names = feature_names[:min_len]
-        importances = importances[:min_len]
-        
-        # Create DataFrame
-        importance_df = pd.DataFrame({
-            'Feature': feature_names,
-            'Importance': importances
-        }).sort_values('Importance', ascending=False)
-        
-        return importance_df
     
     def suggest_optimal_conditions(self, vector_name, host_strain, protein_properties, n_suggestions=5):
         """Generate comprehensive optimization suggestions"""
@@ -542,9 +432,7 @@ class ExpressionOptimizer:
         # Define parameter ranges based on protein properties
         if has_disulfide_bonds:
             temperatures = [16, 25, 30]
-            additives = ["Add reducing agents (DTT, TCEP) during lysis",
-                        "Consider oxidizing refolding conditions",
-                        "Use SHuffle strain if not already selected"]
+            additives = ["Add reducing agents (DTT, TCEP) during lysis"]
         else:
             temperatures = [25, 30, 37]
             additives = []
@@ -552,36 +440,30 @@ class ExpressionOptimizer:
         if is_membrane_protein:
             temperatures = [16, 25]
             induction_concentrations = [0.1, 0.2, 0.5]
-            additives.append("Add detergents (DDM, LDAO) for solubilization")
-            additives.append("Consider glucose (0.5%) to reduce basal expression")
+            additives.append("Add detergents for solubilization")
         else:
             induction_concentrations = [0.2, 0.5, 1.0]
             
-        if size > 100:  # Large protein
+        if size > 100:
             temperatures = [16, 25, 30]
             induction_times = [6, 8, 12, 16]
             additives.append("Consider co-expression with chaperones")
-            additives.append("Extended induction time for proper folding")
         else:
             induction_times = [2, 4, 6, 8]
             
         if is_toxic:
             induction_concentrations = [0.1, 0.2]
             od600_values = [0.6, 0.8, 1.0]
-            additives.append("Use glucose (0.5-1%) to suppress leaky expression")
-            additives.append("Induce at higher cell density")
+            additives.append("Use glucose to suppress leaky expression")
         else:
             od600_values = [0.4, 0.6, 0.8]
         
-        # Parameter combinations
-        param_combinations = []
+        # Generate combinations
+        suggestions = []
         media_options = ['LB', 'TB', '2xYT', 'M9']
         
-        # Generate systematic combinations
-        import itertools
-        
         for temp in temperatures:
-            for time in induction_times[:3]:  # Limit to avoid too many combinations
+            for time in induction_times[:3]:
                 for conc in induction_concentrations[:2]:
                     for od in od600_values[:2]:
                         for media in media_options[:3]:
@@ -594,55 +476,23 @@ class ExpressionOptimizer:
                                 'OD600_at_induction': od,
                                 'media_composition': media
                             }
-                            param_combinations.append(params)
+                            
+                            result = self.predict_expression(params)
+                            
+                            suggestion = {
+                                'parameters': params,
+                                'predicted_expression': result['prediction'],
+                                'confidence': result['confidence'],
+                                'std_dev': result['std_dev'],
+                                'additives': additives,
+                                'protocol_notes': []
+                            }
+                            suggestions.append(suggestion)
         
-        # Predict expression for each combination
-        predictions = []
-        for params in param_combinations:
-            result = self.predict_expression(params)
-            
-            suggestion = {
-                'parameters': params,
-                'predicted_expression': result['prediction'],
-                'confidence': result['confidence'],
-                'std_dev': result['std_dev'],
-                'additives': additives,
-                'protocol_notes': self._generate_protocol_notes(params, protein_properties)
-            }
-            predictions.append(suggestion)
+        # Sort by expression level
+        suggestions.sort(key=lambda x: x['predicted_expression'], reverse=True)
         
-        # Sort by predicted expression (descending)
-        predictions.sort(key=lambda x: x['predicted_expression'], reverse=True)
-        
-        # Return top N suggestions
-        return predictions[:n_suggestions]
-    
-    def _generate_protocol_notes(self, params, protein_properties):
-        """Generate specific protocol notes for given parameters"""
-        notes = []
-        
-        if params['temperature'] <= 20:
-            notes.append("Cold shock expression - expect slower growth but better folding")
-        elif params['temperature'] >= 37:
-            notes.append("High temperature - monitor for inclusion body formation")
-            
-        if params['induction_time'] >= 8:
-            notes.append("Extended induction - monitor cell viability and medium pH")
-            
-        if params['inducer_concentration'] <= 0.2:
-            notes.append("Low inducer concentration - gentle induction to minimize stress")
-        elif params['inducer_concentration'] >= 1.0:
-            notes.append("High inducer concentration - strong induction, monitor for toxicity")
-            
-        if params['media_composition'] == 'M9':
-            notes.append("Minimal medium - slower growth but more controlled conditions")
-        elif params['media_composition'] == 'TB':
-            notes.append("Rich medium - expect higher cell density and expression levels")
-            
-        if protein_properties.get('size', 0) > 100:
-            notes.append("Large protein - consider co-expression with GroEL/GroES chaperones")
-            
-        return notes
+        return suggestions[:n_suggestions]
 
 # ----------------------
 # Database Functions
@@ -657,110 +507,31 @@ def load_vectors():
             vector_data = json.load(f)
             vectors = [Vector(**v) for v in vector_data]
     else:
-        # Create comprehensive vector database
         vectors = [
-            Vector(
-                1, "pET21a", 5443, "T7", "T7", "pBR322", "Ampicillin", 
-                ["His-tag", "C-terminal"],
-                "High-level expression vector with C-terminal His-tag",
-                {
-                    "cloning_sites": ["NdeI", "XhoI", "BamHI", "EcoRI"],
-                    "tag_location": "C-terminal",
-                    "induction": "IPTG",
-                    "copy_number": "Medium",
-                    "expression_level": "Very High"
-                }
-            ),
-            Vector(
-                2, "pET28a", 5369, "T7", "T7", "pBR322", "Kanamycin",
-                ["His-tag", "N-terminal", "T7-tag"],
-                "High-level expression vector with N-terminal His-tag",
-                {
-                    "cloning_sites": ["NdeI", "XhoI", "BamHI", "EcoRI"],
-                    "tag_location": "N-terminal",
-                    "induction": "IPTG",
-                    "copy_number": "Medium",
-                    "expression_level": "Very High"
-                }
-            ),
-            Vector(
-                3, "pET22b", 5493, "T7", "T7", "pBR322", "Ampicillin",
-                ["His-tag", "C-terminal", "pelB"],
-                "Periplasmic expression vector with pelB signal sequence",
-                {
-                    "cloning_sites": ["NdeI", "XhoI", "BamHI", "EcoRI"],
-                    "tag_location": "C-terminal",
-                    "induction": "IPTG",
-                    "secretion": "periplasmic",
-                    "copy_number": "Medium",
-                    "expression_level": "High"
-                }
-            ),
-            Vector(
-                4, "pBAD", 4102, "araBAD", "rrnB", "pBR322", "Ampicillin",
-                ["His-tag", "C-terminal"],
-                "Arabinose-inducible expression vector for tight control",
-                {
-                    "cloning_sites": ["NcoI", "HindIII", "XhoI"],
-                    "tag_location": "C-terminal",
-                    "induction": "Arabinose",
-                    "copy_number": "Medium",
-                    "expression_level": "Medium",
-                    "tight_control": True
-                }
-            ),
-            Vector(
-                5, "pMAL-c5X", 5677, "tac", "lambda t0", "pBR322", "Ampicillin",
-                ["MBP", "N-terminal"],
-                "MBP fusion vector for improved solubility",
-                {
-                    "cloning_sites": ["NdeI", "EcoRI", "BamHI", "SalI"],
-                    "tag_location": "N-terminal",
-                    "induction": "IPTG",
-                    "purification": "Amylose resin",
-                    "solubility_tag": "MBP",
-                    "copy_number": "Medium",
-                    "expression_level": "High"
-                }
-            ),
-            Vector(
-                6, "pGEX-6P-1", 4984, "tac", "lambda t0", "pBR322", "Ampicillin",
-                ["GST", "N-terminal"],
-                "GST fusion vector for improved solubility",
-                {
-                    "cloning_sites": ["BamHI", "EcoRI", "SalI", "NotI"],
-                    "tag_location": "N-terminal",
-                    "induction": "IPTG",
-                    "protease_site": "PreScission",
-                    "solubility_tag": "GST",
-                    "copy_number": "Medium",
-                    "expression_level": "High"
-                }
-            ),
-            Vector(
-                7, "pUC19", 2686, "lac", "lac", "pMB1", "Ampicillin",
-                ["None"],
-                "Basic cloning vector with lac promoter",
-                {
-                    "cloning_sites": ["EcoRI", "SacI", "KpnI", "BamHI", "XbaI"],
-                    "tag_location": "None",
-                    "induction": "IPTG",
-                    "copy_number": "High",
-                    "expression_level": "Low"
-                }
-            ),
-            Vector(
-                8, "pTrcHis", 4356, "trc", "rrnB", "pBR322", "Ampicillin",
-                ["His-tag", "N-terminal"],
-                "Strong constitutive expression with His-tag",
-                {
-                    "cloning_sites": ["NcoI", "HindIII", "BamHI"],
-                    "tag_location": "N-terminal",
-                    "induction": "IPTG",
-                    "copy_number": "Medium",
-                    "expression_level": "High"
-                }
-            )
+            Vector(1, "pET21a", 5443, "T7", "T7", "pBR322", "Ampicillin", ["His-tag", "C-terminal"],
+                   "High-level expression vector with C-terminal His-tag",
+                   {"cloning_sites": ["NdeI", "XhoI", "BamHI", "EcoRI"], "tag_location": "C-terminal", "induction": "IPTG", "expression_level": "Very High"}),
+            Vector(2, "pET28a", 5369, "T7", "T7", "pBR322", "Kanamycin", ["His-tag", "N-terminal", "T7-tag"],
+                   "High-level expression vector with N-terminal His-tag",
+                   {"cloning_sites": ["NdeI", "XhoI", "BamHI", "EcoRI"], "tag_location": "N-terminal", "induction": "IPTG", "expression_level": "Very High"}),
+            Vector(3, "pET22b", 5493, "T7", "T7", "pBR322", "Ampicillin", ["His-tag", "C-terminal", "pelB"],
+                   "Periplasmic expression vector with pelB signal sequence",
+                   {"cloning_sites": ["NdeI", "XhoI", "BamHI", "EcoRI"], "tag_location": "C-terminal", "induction": "IPTG", "expression_level": "High"}),
+            Vector(4, "pBAD", 4102, "araBAD", "rrnB", "pBR322", "Ampicillin", ["His-tag", "C-terminal"],
+                   "Arabinose-inducible expression vector for tight control",
+                   {"cloning_sites": ["NcoI", "HindIII", "XhoI"], "tag_location": "C-terminal", "induction": "Arabinose", "expression_level": "Medium"}),
+            Vector(5, "pMAL-c5X", 5677, "tac", "lambda t0", "pBR322", "Ampicillin", ["MBP", "N-terminal"],
+                   "MBP fusion vector for improved solubility",
+                   {"cloning_sites": ["NdeI", "EcoRI", "BamHI", "SalI"], "tag_location": "N-terminal", "induction": "IPTG", "expression_level": "High"}),
+            Vector(6, "pGEX-6P-1", 4984, "tac", "lambda t0", "pBR322", "Ampicillin", ["GST", "N-terminal"],
+                   "GST fusion vector for improved solubility",
+                   {"cloning_sites": ["BamHI", "EcoRI", "SalI", "NotI"], "tag_location": "N-terminal", "induction": "IPTG", "expression_level": "High"}),
+            Vector(7, "pUC19", 2686, "lac", "lac", "pMB1", "Ampicillin", ["None"],
+                   "Basic cloning vector with lac promoter",
+                   {"cloning_sites": ["EcoRI", "SacI", "KpnI", "BamHI", "XbaI"], "tag_location": "None", "induction": "IPTG", "expression_level": "Low"}),
+            Vector(8, "pTrcHis", 4356, "trc", "rrnB", "pBR322", "Ampicillin", ["His-tag", "N-terminal"],
+                   "Strong constitutive expression with His-tag",
+                   {"cloning_sites": ["NcoI", "HindIII", "BamHI"], "tag_location": "N-terminal", "induction": "IPTG", "expression_level": "High"})
         ]
         save_vectors(vectors)
         
@@ -781,64 +552,47 @@ def load_hosts():
             host_data = json.load(f)
             hosts = [Host(**h) for h in host_data]
     else:
-        # Create comprehensive host database
         hosts = [
-            Host(
-                1, "BL21(DE3)", "E. coli",
-                "F– ompT gal dcm lon hsdSB(rB–mB–) λ(DE3 [lacI lacUV5-T7p07 ind1 sam7 nin5]) [malB+]K-12(λS)",
-                "Standard expression strain with T7 RNA polymerase",
-                ["T7 expression", "Protease deficient", "General purpose", "Fast growth"],
-                ["Not suitable for toxic proteins", "No rare codon support", "May form inclusion bodies"]
-            ),
-            Host(
-                2, "Rosetta(DE3)", "E. coli",
-                "F- ompT hsdSB(rB- mB-) gal dcm (DE3) pRARE (CamR)",
-                "Enhanced expression of proteins containing rare codons",
-                ["T7 expression", "Rare codon optimization", "Protease deficient", "tRNA supplementation"],
-                ["Additional antibiotic (chloramphenicol) required", "Slower growth than BL21"]
-            ),
-            Host(
-                3, "BL21(DE3)pLysS", "E. coli",
-                "F– ompT gal dcm lon hsdSB(rB–mB–) λ(DE3) pLysS(cmR)",
-                "Reduced basal expression, good for toxic proteins",
-                ["T7 expression", "Reduced leaky expression", "Toxic protein compatible", "T7 lysozyme control"],
-                ["Lower overall expression", "Additional antibiotic required", "More complex maintenance"]
-            ),
-            Host(
-                4, "C41(DE3)", "E. coli",
-                "F– ompT gal dcm hsdSB(rB- mB-) (DE3)",
-                "Optimized for membrane proteins and toxic proteins",
-                ["Membrane protein expression", "Toxic protein compatible", "T7 expression", "Reduced inclusion bodies"],
-                ["Lower expression of soluble proteins", "Slower growth", "May require optimization"]
-            ),
-            Host(
-                5, "SHuffle T7", "E. coli",
-                "F´ lac, pro, lacIQ / Δ(ara-leu)7697 araD139 fhuA2 lacZ::T7 gene1",
-                "Enhanced disulfide bond formation in cytoplasm",
-                ["Disulfide bond formation", "T7 expression", "Oxidizing cytoplasmic environment", "DsbC co-expression"],
-                ["Slower growth", "Lower overall yield", "Requires special conditions"]
-            ),
-            Host(
-                6, "ArcticExpress(DE3)", "E. coli",
-                "E. coli B F– ompT hsdS(rB– mB–) dcm+ Tetr gal λ(DE3) endA Hte [cpn10 cpn60 Gentr]",
-                "Cold-adapted chaperonins for low temperature expression",
-                ["Low temperature expression", "Cold-adapted chaperones", "T7 expression", "Proper folding"],
-                ["Gentamicin resistance", "Slower growth", "Lower yields"]
-            ),
-            Host(
-                7, "DH5α", "E. coli",
-                "F– endA1 glnV44 thi-1 recA1 relA1 gyrA96 deoR nupG purB20 φ80dlacZΔM15",
-                "Standard cloning strain, not for expression",
-                ["High transformation efficiency", "Stable plasmid maintenance", "Blue-white screening"],
-                ["No T7 RNA polymerase", "Poor expression", "Only for cloning"]
-            ),
-            Host(
-                8, "Origami(DE3)", "E. coli",
-                "Δ(ara-leu)7697 ΔlacX74 ΔphoA PvuII phoR araD139 ahpC galE galK rpsL (DE3) gor522::Tn10 trxB",
-                "Enhanced disulfide bond formation with trxB mutation",
-                ["Disulfide bond formation", "T7 expression", "Oxidizing environment", "trxB/gor mutations"],
-                ["Slower growth", "Requires special media", "Lower overall expression"]
-            )
+            Host(1, "BL21(DE3)", "E. coli",
+                 "F- ompT gal dcm lon hsdSB(rB-mB-) λ(DE3 [lacI lacUV5-T7p07 ind1 sam7 nin5]) [malB+]K-12(λS)",
+                 "Standard expression strain with T7 RNA polymerase",
+                 ["T7 expression", "Protease deficient", "General purpose", "Fast growth"],
+                 ["Not suitable for toxic proteins", "No rare codon support"]),
+            Host(2, "Rosetta(DE3)", "E. coli",
+                 "F- ompT hsdSB(rB- mB-) gal dcm (DE3) pRARE (CamR)",
+                 "Enhanced expression of proteins containing rare codons",
+                 ["T7 expression", "Rare codon optimization", "Protease deficient", "tRNA supplementation"],
+                 ["Additional antibiotic required", "Slower growth than BL21"]),
+            Host(3, "BL21(DE3)pLysS", "E. coli",
+                 "F- ompT gal dcm lon hsdSB(rB-mB-) λ(DE3) pLysS(cmR)",
+                 "Reduced basal expression, good for toxic proteins",
+                 ["T7 expression", "Reduced leaky expression", "Toxic protein compatible", "T7 lysozyme control"],
+                 ["Lower overall expression", "Additional antibiotic required"]),
+            Host(4, "C41(DE3)", "E. coli",
+                 "F- ompT gal dcm hsdSB(rB- mB-) λ(DE3)",
+                 "Optimized for membrane proteins and toxic proteins",
+                 ["Membrane protein expression", "Toxic protein compatible", "T7 expression", "Reduced inclusion bodies"],
+                 ["Lower expression of soluble proteins", "Slower growth"]),
+            Host(5, "SHuffle T7", "E. coli",
+                 "F' lac, pro, lacIQ / Δ(ara-leu)7697 araD139 fhuA2 lacZ::T7 gene1",
+                 "Enhanced disulfide bond formation in cytoplasm",
+                 ["Disulfide bond formation", "T7 expression", "Oxidizing cytoplasmic environment", "DsbC co-expression"],
+                 ["Slower growth", "Lower overall yield"]),
+            Host(6, "ArcticExpress(DE3)", "E. coli",
+                 "E. coli B F- ompT hsdS(rB- mB-) dcm+ Tetr gal λ(DE3) endA Hte [cpn10 cpn60 Gentr]",
+                 "Cold-adapted chaperonins for low temperature expression",
+                 ["Low temperature expression", "Cold-adapted chaperones", "T7 expression", "Proper folding"],
+                 ["Gentamicin resistance", "Slower growth"]),
+            Host(7, "DH5α", "E. coli",
+                 "F- endA1 glnV44 thi-1 recA1 relA1 gyrA96 deoR nupG purB20 φ80dlacZΔM15",
+                 "Standard cloning strain, not for expression",
+                 ["High transformation efficiency", "Stable plasmid maintenance", "Blue-white screening"],
+                 ["No T7 RNA polymerase", "Poor expression", "Only for cloning"]),
+            Host(8, "Origami(DE3)", "E. coli",
+                 "Δ(ara-leu)7697 ΔlacX74 ΔphoA PvuII phoR araD139 ahpC galE galK rpsL λ(DE3) gor522::Tn10 trxB",
+                 "Enhanced disulfide bond formation with trxB mutation",
+                 ["Disulfide bond formation", "T7 expression", "Oxidizing environment", "trxB/gor mutations"],
+                 ["Slower growth", "Requires special media"])
         ]
         save_hosts(hosts)
         
@@ -856,21 +610,18 @@ def save_hosts(hosts):
 
 def analyze_protein_sequence(sequence):
     """Comprehensive protein sequence analysis"""
-    # Clean sequence
     sequence = re.sub(r'[^A-Za-z]', '', sequence.upper())
     
     if not sequence:
         return {"error": "Invalid sequence. Please provide a valid protein sequence."}
     
-    # Check if sequence contains only valid amino acids
     valid_aas = set('ACDEFGHIKLMNPQRSTVWY')
     if not set(sequence).issubset(valid_aas):
         return {"error": "Sequence contains invalid amino acid characters."}
     
     try:
-        # Basic properties
         seq_length = len(sequence)
-        mol_weight = seq_length * 110 / 1000  # Average AA weight ~110 Da
+        mol_weight = seq_length * 110 / 1000
         
         # Amino acid composition
         aa_count = {}
@@ -879,250 +630,62 @@ def analyze_protein_sequence(sequence):
         
         aa_percent = {aa: count/seq_length for aa, count in aa_count.items()}
         
-        # Hydrophobicity analysis
+        # Basic properties
         hydrophobic_aas = 'AILMFWYV'
-        hydrophilic_aas = 'DEKNQR'
-        polar_aas = 'STYHCQ'
-        
         hydrophobicity = sum(1 for aa in sequence if aa in hydrophobic_aas) / seq_length
-        hydrophilicity = sum(1 for aa in sequence if aa in hydrophilic_aas) / seq_length
-        polarity = sum(1 for aa in sequence if aa in polar_aas) / seq_length
         
-        # Charge analysis
-        positive_aas = 'KRH'
-        negative_aas = 'DE'
+        charged_aas = 'DEKR'
+        charged_residues = sum(1 for aa in sequence if aa in charged_aas) / seq_length
         
-        positive_charge = sum(1 for aa in sequence if aa in positive_aas) / seq_length
-        negative_charge = sum(1 for aa in sequence if aa in negative_aas) / seq_length
-        net_charge = positive_charge - negative_charge
-        
-        # Special amino acids
         cys_count = aa_count.get('C', 0)
-        pro_count = aa_count.get('P', 0)
-        met_count = aa_count.get('M', 0)
-        trp_count = aa_count.get('W', 0)
-        
-        # Protein characteristics
         has_disulfide_potential = cys_count >= 2
-        is_proline_rich = pro_count / seq_length > 0.1
-        is_hydrophobic = hydrophobicity > 0.4
-        is_membrane_like = hydrophobicity > 0.45 and seq_length > 100
         
-        # Instability prediction (simplified)
-        instability_factors = [
-            abs(hydrophobicity - 0.35) * 50,  # Optimal hydrophobicity around 0.35
-            abs(net_charge) * 20,  # Extreme charges can cause instability
-            (pro_count / seq_length) * 30,  # Too many prolines
-            (cys_count / seq_length) * 25 if cys_count > 6 else 0  # Too many cysteines
-        ]
-        
-        instability_index = sum(instability_factors)
+        # Simplified analysis
+        instability_index = abs(hydrophobicity - 0.5) * 100 + charged_residues * 50
         is_stable = instability_index < 40
         
-        # Aggregation propensity
-        aggregation_prone_regions = []
-        window_size = 6
-        
-        for i in range(seq_length - window_size + 1):
-            window = sequence[i:i+window_size]
-            hydrophobic_in_window = sum(1 for aa in window if aa in hydrophobic_aas)
-            if hydrophobic_in_window >= 4:  # 4 out of 6 hydrophobic
-                aggregation_prone_regions.append((i+1, i+window_size))
-        
-        aggregation_propensity = len(aggregation_prone_regions) / max(1, seq_length/window_size)
-        
-        # Solubility prediction
-        solubility_factors = [
-            -hydrophobicity * 2,  # More hydrophobic = less soluble
-            hydrophilicity * 1.5,  # More hydrophilic = more soluble
-            -aggregation_propensity * 0.5,  # Aggregation reduces solubility
-            -(cys_count / seq_length) * 0.3 if cys_count > 4 else 0  # Many cysteines can reduce solubility
-        ]
-        
-        solubility_score = sum(solubility_factors) + 0.5  # Base score
-        solubility_score = max(0, min(1, solubility_score))
-        
-        if solubility_score > 0.7:
-            solubility_prediction = "High"
-        elif solubility_score > 0.4:
-            solubility_prediction = "Medium"
-        else:
-            solubility_prediction = "Low"
-        
-        # Issues and recommendations
         issues = []
         recommendations = []
         
-        # Disulfide bonds
         if has_disulfide_potential:
-            issues.append(f"Multiple cysteines detected ({cys_count} cysteines) - potential disulfide bonds")
-            if cys_count % 2 != 0:
-                issues.append("Odd number of cysteines - may form intermolecular disulfides")
-            recommendations.append("Consider using SHuffle T7 or Origami strains for disulfide bond formation")
-            recommendations.append("Add reducing agents (DTT, TCEP) during purification")
-            recommendations.append("Consider refolding protocols if expressed as inclusion bodies")
+            issues.append(f"Multiple cysteines detected ({cys_count} cysteines)")
+            recommendations.append("Consider using SHuffle T7 strain for disulfide bond formation")
         
-        # Hydrophobicity and membrane proteins
-        if is_membrane_like:
-            issues.append("Highly hydrophobic protein with membrane protein characteristics")
-            recommendations.append("Use C41(DE3) or C43(DE3) strains optimized for membrane proteins")
-            recommendations.append("Lower expression temperature (16-25°C)")
-            recommendations.append("Add detergents (DDM, LDAO, Triton X-100) for solubilization")
-            recommendations.append("Consider cell-free expression systems")
-        elif is_hydrophobic:
-            issues.append("Hydrophobic protein - may form inclusion bodies")
-            recommendations.append("Lower expression temperature to improve folding")
-            recommendations.append("Consider fusion with solubility tags (MBP, GST)")
+        is_hydrophobic = hydrophobicity > 0.4
+        if is_hydrophobic:
+            issues.append("Highly hydrophobic protein (potential membrane protein)")
+            recommendations.append("Consider using C41(DE3) strain for membrane proteins")
         
-        # Stability issues
         if not is_stable:
-            issues.append(f"Potentially unstable protein (instability index: {instability_index:.1f})")
-            recommendations.append("Use lower expression temperature (16-25°C)")
-            recommendations.append("Consider fusion tags (MBP, GST, SUMO) to improve stability")
-            recommendations.append("Add stabilizing agents (glycerol, trehalose) during purification")
+            issues.append(f"Potentially unstable protein")
+            recommendations.append("Consider fusion tags like MBP or GST to improve stability")
         
-        # Size considerations
         if mol_weight > 70:
-            issues.append(f"Large protein ({mol_weight:.1f} kDa) - may require special conditions")
-            recommendations.append("Consider co-expression with chaperones (GroEL/GroES)")
-            recommendations.append("Use longer induction times (8-16 hours)")
-            recommendations.append("Lower expression temperature for proper folding")
-        elif mol_weight < 10:
-            issues.append(f"Small protein ({mol_weight:.1f} kDa) - may be unstable or degraded")
-            recommendations.append("Consider fusion with carrier proteins")
-            recommendations.append("Add protease inhibitors during purification")
+            issues.append(f"Large protein ({mol_weight:.1f} kDa)")
+            recommendations.append("Consider co-expression with chaperones")
         
-        # Rare codons
-        rare_aa_threshold = 0.05  # 5%
-        rare_aas = []
-        rare_codon_aas = {'R': 'Arginine', 'C': 'Cysteine', 'I': 'Isoleucine', 'L': 'Leucine', 'P': 'Proline'}
-        
-        for aa, name in rare_codon_aas.items():
-            if aa_percent.get(aa, 0) > rare_aa_threshold:
-                rare_aas.append(f"{name} ({aa_percent[aa]*100:.1f}%)")
-        
-        if rare_aas:
-            issues.append(f"High content of amino acids with rare codons: {', '.join(rare_aas)}")
-            recommendations.append("Consider using Rosetta(DE3) or other rare codon strains")
-            recommendations.append("Optimize codon usage for E. coli expression")
-        
-        # Aggregation
-        if aggregation_propensity > 0.3:
-            issues.append(f"High aggregation propensity ({len(aggregation_prone_regions)} hydrophobic regions)")
-            recommendations.append("Use low expression temperature and slow induction")
-            recommendations.append("Add chemical chaperones (arginine, urea at low concentration)")
-            recommendations.append("Consider refolding from inclusion bodies")
-        
-        # Proline content
-        if is_proline_rich:
-            issues.append(f"Proline-rich protein ({pro_count/seq_length*100:.1f}% proline)")
-            recommendations.append("May require longer folding times")
-            recommendations.append("Consider specialized chaperones or folding conditions")
-        
-        # Solubility
-        if solubility_prediction == "Low":
-            issues.append("Predicted low solubility")
-            recommendations.append("Consider fusion with solubility-enhancing tags (MBP, GST)")
-            recommendations.append("Use minimal induction conditions")
-            recommendations.append("Add osmolytes (sorbitol, glycine betaine) to growth medium")
-        
-        # Expression recommendations based on characteristics
-        expression_recommendations = []
-        
-        if has_disulfide_potential:
-            expression_recommendations.append("Temperature: 16-25°C for proper disulfide formation")
-            expression_recommendations.append("Host: SHuffle T7 or Origami(DE3)")
-        elif is_hydrophobic:
-            expression_recommendations.append("Temperature: 16-25°C to minimize aggregation")
-            expression_recommendations.append("Host: C41(DE3) for membrane-like proteins")
-        else:
-            expression_recommendations.append("Temperature: 25-30°C for optimal expression")
-            expression_recommendations.append("Host: BL21(DE3) or Rosetta(DE3)")
-        
-        if mol_weight > 50:
-            expression_recommendations.append("Induction time: 8-16 hours for large proteins")
-            expression_recommendations.append("IPTG concentration: 0.1-0.5 mM (gentle induction)")
-        else:
-            expression_recommendations.append("Induction time: 3-6 hours")
-            expression_recommendations.append("IPTG concentration: 0.5-1.0 mM")
-        
-        # Return comprehensive analysis
         return {
             "sequence_length": seq_length,
             "molecular_weight": round(mol_weight, 2),
-            "amino_acid_composition": aa_percent,
-            "hydrophobicity": round(hydrophobicity, 3),
-            "hydrophilicity": round(hydrophilicity, 3),
-            "polarity": round(polarity, 3),
-            "positive_charge": round(positive_charge, 3),
-            "negative_charge": round(negative_charge, 3),
-            "net_charge": round(net_charge, 3),
             "instability_index": round(instability_index, 2),
             "is_stable": is_stable,
+            "hydrophobicity": round(hydrophobicity, 3),
+            "charged_residues": round(charged_residues, 3),
             "cysteine_count": cys_count,
-            "proline_count": pro_count,
-            "methionine_count": met_count,
-            "tryptophan_count": trp_count,
             "has_disulfide_potential": has_disulfide_potential,
-            "is_proline_rich": is_proline_rich,
             "is_hydrophobic": is_hydrophobic,
-            "is_membrane_like": is_membrane_like,
-            "aggregation_propensity": round(aggregation_propensity, 3),
-            "aggregation_prone_regions": aggregation_prone_regions,
-            "solubility_score": round(solubility_score, 3),
-            "solubility_prediction": solubility_prediction,
             "issues": issues,
             "recommendations": recommendations,
-            "expression_recommendations": expression_recommendations,
             "protein_properties": {
                 "size": mol_weight,
                 "has_disulfide_bonds": has_disulfide_potential,
-                "is_membrane_protein": is_membrane_like,
-                "is_toxic": not is_stable or aggregation_propensity > 0.4,
-                "is_large": mol_weight > 70,
-                "solubility": solubility_prediction
+                "is_membrane_protein": is_hydrophobic,
+                "is_toxic": not is_stable
             }
         }
         
     except Exception as e:
         return {"error": f"Error analyzing sequence: {str(e)}"}
-
-def parse_fasta(fasta_string):
-    """Parse FASTA format sequences"""
-    if not fasta_string.strip():
-        return []
-    
-    sequences = []
-    current_header = None
-    current_sequence = ""
-    
-    for line in fasta_string.strip().split('\n'):
-        line = line.strip()
-        if line.startswith('>'):
-            # Save previous sequence if exists
-            if current_header and current_sequence:
-                sequences.append({
-                    "id": current_header.split()[0][1:],  # Remove '>'
-                    "description": current_header[1:],  # Full description
-                    "sequence": current_sequence
-                })
-            
-            # Start new sequence
-            current_header = line
-            current_sequence = ""
-        else:
-            # Add to current sequence
-            current_sequence += line
-    
-    # Add last sequence
-    if current_header and current_sequence:
-        sequences.append({
-            "id": current_header.split()[0][1:],
-            "description": current_header[1:],
-            "sequence": current_sequence
-        })
-    
-    return sequences
 
 # ----------------------
 # Session State Management
@@ -1162,15 +725,36 @@ def init_session_state():
         st.session_state.show_signup = False
 
 # ----------------------
-# UI Components
+# UI Components (CORRECTED)
 # ----------------------
 
+def add_developer_credit():
+    """Add discrete developer credit"""
+    st.markdown("""
+    <div style="position: fixed; 
+                bottom: 5px; 
+                right: 5px; 
+                font-size: 8px; 
+                color: #888; 
+                opacity: 0.5; 
+                z-index: 1000;
+                background: rgba(255,255,255,0.8);
+                padding: 2px 5px;
+                border-radius: 3px;">
+        Developed by Dr Merzoug Mohamed
+    </div>
+    """, unsafe_allow_html=True)
+
 def show_header():
-    """Display application header with NeoRen branding"""
+    """Display application header with NeoRen logo (CORRECTED - No flask)"""
     col1, col2, col3, col4 = st.columns([1, 3, 1, 1])
     
     with col1:
-        st.image("https://img.icons8.com/fluency/96/test-tube.png", width=80)
+        # CORRECTED: NeoRen logo instead of flask icon
+        try:
+            st.image(NEOREN_LOGO_URL, width=80)
+        except:
+            st.markdown("**NeoRen®**")
     
     with col2:
         st.title("RennetOptiMax Pro")
@@ -1178,11 +762,8 @@ def show_header():
         st.caption("Powered by NeoRen® - Engineered for Excellence")
     
     with col3:
-        # NeoRen Logo
-        try:
-            st.image(NEOREN_LOGO_URL, width=100)
-        except:
-            st.markdown("**NeoRen®**")
+        # Space for balance
+        st.write("")
     
     with col4:
         if st.session_state.authenticated:
@@ -1191,49 +772,54 @@ def show_header():
                 st.rerun()
 
 def show_product_banner():
-    """Display comprehensive product promotion banner"""
+    """Display product promotion banner with FIXED sizing"""
     st.markdown(f"""
     <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
                 color: white; 
-                padding: 30px; 
+                padding: 40px; 
                 border-radius: 15px; 
                 margin: 20px 0; 
                 text-align: center;
-                box-shadow: 0 8px 16px rgba(0,0,0,0.1);">
-        <div style="display: flex; align-items: center; justify-content: center; margin-bottom: 20px;">
-            <img src="{NEOREN_LOGO_URL}" alt="NeoRen Logo" style="height: 70px; margin-right: 20px;">
-            <div>
-                <h2 style="margin: 0; font-size: 2.2em;">🎯 NeoRen Chymosin Powder</h2>
-                <h3 style="margin: 5px 0; font-size: 1.3em;">Premium Sustainable Rennet for Modern Cheese Production</h3>
+                box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+                min-height: 300px;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;">
+        <div style="display: flex; align-items: center; justify-content: center; margin-bottom: 30px; flex-wrap: wrap;">
+            <img src="{NEOREN_LOGO_URL}" alt="NeoRen Logo" style="height: 80px; margin-right: 30px; margin-bottom: 10px;">
+            <div style="text-align: left; min-width: 400px;">
+                <h2 style="margin: 0; font-size: 2.5em; line-height: 1.2;">🎯 NeoRen Chymosin Powder</h2>
+                <h3 style="margin: 10px 0; font-size: 1.5em; line-height: 1.3;">Premium Sustainable Rennet for Modern Cheese Production</h3>
             </div>
         </div>
-        <div style="margin: 20px 0;">
-            <p style="font-size: 1.1em; margin: 10px 0;">✅ 100% Animal-Free • ✅ Superior Performance • ✅ Cost-Effective & Scalable</p>
-            <p style="font-size: 1.1em; margin: 10px 0;">🧬 Engineered with Advanced Genetic Engineering • 🌱 Environmentally Sustainable</p>
+        <div style="margin: 30px 0; line-height: 1.6;">
+            <p style="font-size: 1.2em; margin: 15px 0;">✅ 100% Animal-Free • ✅ Superior Performance • ✅ Cost-Effective & Scalable</p>
+            <p style="font-size: 1.1em; margin: 15px 0;">🧬 Engineered with Advanced Genetic Engineering • 🌱 Environmentally Sustainable</p>
         </div>
-        <div style="margin: 25px 0;">
+        <div style="margin: 30px 0;">
             <a href="{NEOREN_WEBSITE}" target="_blank" style="background: #ff6b6b; 
                           color: white; 
                           border: none; 
-                          padding: 18px 35px; 
-                          border-radius: 8px; 
-                          font-size: 1.2em; 
+                          padding: 20px 40px; 
+                          border-radius: 10px; 
+                          font-size: 1.3em; 
                           text-decoration: none;
                           display: inline-block;
                           font-weight: bold;
                           box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-                          transition: all 0.3s ease;">
+                          transition: all 0.3s ease;
+                          min-width: 350px;">
                 🛒 Buy 500g & Get 1 Year Free Platform Access
             </a>
         </div>
-        <p style="font-size: 0.9em; margin: 10px 0; opacity: 0.9;">
-            <em>Revolutionizing cheese production through sustainable biotechnology</em>
+        <p style="font-size: 1em; margin: 15px 0; opacity: 0.9; line-height: 1.4;">
+            <em>Revolutionizing cheese production through sustainable biotechnology solutions</em>
         </p>
     </div>
     """, unsafe_allow_html=True)
 
 def show_access_plans():
-    """Display comprehensive access plans"""
+    """Display comprehensive access plans with FIXED sizing"""
     st.markdown("## 🎁 Unlock Full Power of RennetOptiMax Pro")
     st.markdown("*Choose the access method that fits you best:*")
     
@@ -1242,20 +828,28 @@ def show_access_plans():
         col1, col2 = st.columns(2)
         with col1:
             st.markdown("""
-            **✅ 1-month free trial** with all features
-            - Complete vector and host database
-            - AI-powered optimization
-            - Sequence analysis tools
-            - Protocol generation
-            """)
+            <div style="min-height: 150px; padding: 20px;">
+            <h4>✅ 1-month free trial with all features</h4>
+            <ul style="line-height: 1.6;">
+                <li>Complete vector and host database</li>
+                <li>AI-powered optimization</li>
+                <li>Sequence analysis tools</li>
+                <li>Protocol generation</li>
+            </ul>
+            </div>
+            """, unsafe_allow_html=True)
         with col2:
             st.markdown("""
-            **✅ Lifetime access** to core features
-            - Vector Selection Tool
-            - Host Strain Database
-            - Basic recommendations
-            - Community support
-            """)
+            <div style="min-height: 150px; padding: 20px;">
+            <h4>✅ Lifetime access to core features</h4>
+            <ul style="line-height: 1.6;">
+                <li>Vector Selection Tool</li>
+                <li>Host Strain Database</li>
+                <li>Basic recommendations</li>
+                <li>Community support</li>
+            </ul>
+            </div>
+            """, unsafe_allow_html=True)
     
     # Referral Rewards
     with st.expander("🔗 Referral Reward Program"):
@@ -1269,16 +863,20 @@ def show_access_plans():
                 username = st.session_state.username
                 referral_code = users[username]['referral_code']
                 st.code(f"Your Referral Code: {referral_code}")
-                st.markdown("**🎁 Benefits:**")
-                st.markdown("- 1 referral = 3 months free access")
-                st.markdown("- 3 referrals = 1 year free access")
-                st.markdown("- 5+ referrals = Lifetime access upgrade")
+                st.markdown("""
+                <div style="line-height: 1.6;">
+                <strong>🎁 Benefits:</strong><br>
+                • 1 referral = 3 months free access<br>
+                • 3 referrals = 1 year free access<br>
+                • 5+ referrals = Lifetime access upgrade
+                </div>
+                """, unsafe_allow_html=True)
             else:
                 st.info("Login to get your personal referral code!")
         
         with col2:
             st.markdown(f"""
-            <div style="text-align: center; background: #f0f8ff; padding: 15px; border-radius: 10px;">
+            <div style="text-align: center; background: #f0f8ff; padding: 20px; border-radius: 10px; min-height: 120px; display: flex; flex-direction: column; justify-content: center;">
                 <h4>Share & Earn</h4>
                 <p>Help others discover sustainable protein expression!</p>
             </div>
@@ -1290,34 +888,40 @@ def show_access_plans():
         
         with col1:
             st.markdown("""
-            **Buy 500g of NeoRen Chymosin Powder → Get 1 year full access instantly**
+            <div style="min-height: 200px; padding: 15px; line-height: 1.6;">
+            <strong>Buy 500g of NeoRen Chymosin Powder → Get 1 year full access instantly</strong><br><br>
             
-            **Product Benefits:**
-            - 🧬 Premium sustainable rennet
-            - 🏭 Industrial-grade performance
-            - 🌱 100% animal-free
-            - 📈 Cost-effective production
-            - 🔬 Consistent quality
+            <strong>Product Benefits:</strong><br>
+            • 🧬 Premium sustainable rennet<br>
+            • 🏭 Industrial-grade performance<br>
+            • 🌱 100% animal-free<br>
+            • 📈 Cost-effective production<br>
+            • 🔬 Consistent quality<br><br>
             
-            **Platform Benefits:**
-            - 🎯 Immediate full access
-            - 📞 Priority technical support
-            - 📚 Exclusive protocols
-            - 🔄 Regular updates
-            """)
+            <strong>Platform Benefits:</strong><br>
+            • 🎯 Immediate full access<br>
+            • 📞 Priority technical support<br>
+            • 📚 Exclusive protocols<br>
+            • 🔄 Regular updates
+            </div>
+            """, unsafe_allow_html=True)
         
         with col2:
             st.markdown(f"""
-            <div style="text-align: center; margin: 10px 0;">
-                <img src="{NEOREN_LOGO_URL}" alt="NeoRen" style="width: 80px; margin-bottom: 10px;">
-                <br>
+            <div style="text-align: center; margin: 10px 0; min-height: 200px; display: flex; flex-direction: column; justify-content: center;">
+                <img src="{NEOREN_LOGO_URL}" alt="NeoRen" style="width: 80px; margin-bottom: 15px;">
+                <h4 style="color: #ff6600; margin: 15px 0;">Special Offer</h4>
+                <p style="font-size: 14px; margin: 10px 0;">Buy any NeoRen product and get:</p>
+                <p style="font-size: 18px; font-weight: bold; color: #ff6600; margin: 15px 0;">1 Year Platform Access</p>
+                <p style="font-size: 12px; color: #666;">Worth $85+ value</p>
                 <a href="{NEOREN_WEBSITE}" target="_blank" style="background: #ff6600; 
                           color: white; 
                           padding: 12px 20px; 
                           border-radius: 6px; 
                           text-decoration: none; 
                           display: inline-block;
-                          font-weight: bold;">
+                          font-weight: bold;
+                          margin-top: 10px;">
                     🌐 Visit NeoRen Store
                 </a>
             </div>
@@ -1327,7 +931,6 @@ def show_access_plans():
     with st.expander("💳 Subscription Plans (Post-Trial)"):
         st.markdown("**Affordable pricing tailored to different user profiles:**")
         
-        # Create pricing table
         pricing_data = {
             'User Type': ['🎓 Student', '🧪 Academic Researcher', '🧑‍💼 Industry Professional'],
             '1 Month': ['$5', '$7', '$10'],
@@ -1339,40 +942,19 @@ def show_access_plans():
         st.table(pricing_df)
         
         st.markdown("""
-        **✅ All subscriptions include:**
-        - Full access to all features
-        - Priority technical support
-        - Regular software updates
-        - Advanced analytics
-        - Custom protocol generation
-        - Unlimited optimizations
-        """)
-        
-        st.info("💡 **Student Discount:** Valid student ID required for student pricing")
-    
-    # Loyalty Program
-    with st.expander("💎 VIP Loyalty Program"):
-        st.markdown("""
-        **Long-term subscribers and highly active users may qualify for exclusive benefits:**
-        
-        **🌟 Platinum Status** (1+ year subscribers):
-        - 20% discount on renewals
-        - Beta access to new features
-        - Direct line to development team
-        
-        **💎 Diamond Status** (2+ year subscribers or high usage):
-        - Lifetime unlimited access upgrade
-        - Co-development opportunities
-        - Revenue sharing on contributed protocols
-        
-        **🏆 Elite Partner** (Enterprise users):
-        - Custom feature development
-        - White-label licensing options
-        - Training and consulting services
-        """)
+        <div style="line-height: 1.6; padding: 15px;">
+        <strong>✅ All subscriptions include:</strong><br>
+        • Full access to all features<br>
+        • Priority technical support<br>
+        • Regular software updates<br>
+        • Advanced analytics<br>
+        • Custom protocol generation<br>
+        • Unlimited optimizations
+        </div>
+        """, unsafe_allow_html=True)
 
 def show_login_form():
-    """Display comprehensive login form"""
+    """CORRECTED: Display login form WITHOUT public demo buttons"""
     # Header with NeoRen branding
     col1, col2, col3 = st.columns([1, 2, 1])
     
@@ -1384,60 +966,11 @@ def show_login_form():
         st.markdown("## 🔐 Login to Your Account")
         st.caption("Access the world's most advanced protein expression platform")
     
-    # Demo accounts section
-    st.markdown("### 🎮 Demo Accounts (No Password Required)")
-    st.markdown("*Experience the full power of RennetOptiMax Pro instantly:*")
+    # REMOVED: All public demo buttons - authentication required for all access
     
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.markdown("""
-        **👨‍💼 Administrator Demo**
-        - ✅ Complete platform access
-        - ✅ All features unlocked
-        - ✅ No time restrictions
-        - ✅ Full optimization suite
-        """)
-        if st.button("🚀 Launch Admin Demo", use_container_width=True, type="primary"):
-            success, user_data = demo_login('admin')
-            if success:
-                st.success(f"Welcome {user_data['name']}! Full access granted.")
-                st.balloons()
-                st.rerun()
-    
-    with col2:
-        st.markdown("""
-        **🎓 Student Demo**
-        - ✅ 30-day trial access
-        - ✅ Vector & Host databases
-        - ✅ Basic optimization
-        - ✅ Learning resources
-        """)
-        if st.button("📚 Start Student Trial", use_container_width=True, type="secondary"):
-            success, user_data = demo_login('student')
-            if success:
-                st.success(f"Welcome {user_data['name']}! Student trial activated.")
-                st.rerun()
-    
-    with col3:
-        st.markdown("""
-        **🧑‍💼 Professional Demo**
-        - ✅ 30-day trial access
-        - ✅ Advanced features
-        - ✅ Sequence analysis
-        - ✅ Protocol generation
-        """)
-        if st.button("💼 Try Professional", use_container_width=True, type="secondary"):
-            success, user_data = demo_login('professional')
-            if success:
-                st.success(f"Welcome {user_data['name']}! Professional trial started.")
-                st.rerun()
-    
-    st.divider()
-    
-    # Manual login section
+    # Manual login section ONLY
     st.markdown("### 🔑 Account Login")
-    st.markdown("*Already have an account? Sign in below:*")
+    st.markdown("*Sign in with your credentials:*")
     
     with st.form("login_form"):
         col1, col2 = st.columns(2)
@@ -1478,65 +1011,38 @@ def show_login_form():
                 st.error("⚠️ Please enter both username and password")
         
         if forgot_password:
-            st.info("🔄 Password reset functionality - Contact support@neoren.com")
+            st.info("🔄 Password reset - Contact administrator for demo account credentials")
         
         if create_account:
             st.session_state.show_signup = True
             st.session_state.show_login = False
             st.rerun()
     
-    # Credentials info for demo
-    with st.expander("🔍 Demo Account Credentials"):
+    # CORRECTED: Admin-only credentials (no public demo access)
+    with st.expander("🔐 Demo Account Credentials (Administrator Use Only)"):
         st.markdown("""
-        **For manual login testing:**
+        **Demo Account Credentials (Provided by Administrator Only):**
         
-        **👨‍💼 Administrator Account:**
+        **Administrator Account:**
         - Username: `admin`
         - Password: `admin123`
         - Access: Full platform (lifetime)
         
-        **🎓 Student Demo Account:**
+        **Student Demo Account:**
         - Username: `demo_student` 
         - Password: `student123`
         - Access: Basic features (30-day trial)
         
-        **🧑‍💼 Professional Demo Account:**
+        **Professional Demo Account:**
         - Username: `demo_professional`
         - Password: `pro123`
         - Access: Advanced features (30-day trial)
-        """)
-    
-    # Footer with benefits
-    st.markdown("---")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.markdown("""
-        **🔬 Advanced Analytics**
-        - ML-powered predictions
-        - Real-time optimization
-        - Comprehensive reporting
-        """)
-    
-    with col2:
-        st.markdown("""
-        **📚 Expert Knowledge**
-        - Curated protocols
-        - Best practices
-        - Troubleshooting guides
-        """)
-    
-    with col3:
-        st.markdown("""
-        **🤝 Community Support**
-        - Active user forum
-        - Expert consultations
-        - Regular webinars
+        
+        *Note: These credentials are provided by the system administrator for demonstration purposes only.*
         """)
 
 def show_signup_form():
-    """Display comprehensive user registration form"""
+    """Display comprehensive user registration form with FIXED sizing"""
     # Header
     col1, col2, col3 = st.columns([1, 2, 1])
     
@@ -1548,16 +1054,20 @@ def show_signup_form():
         st.markdown("## 📝 Create Your Account")
         st.caption("Join thousands of researchers optimizing protein expression")
     
-    # Benefits banner
+    # Benefits banner with FIXED sizing
     st.markdown(f"""
     <div style="background: linear-gradient(90deg, #4CAF50 0%, #45a049 100%); 
                 color: white; 
-                padding: 20px; 
+                padding: 25px; 
                 border-radius: 10px; 
                 margin: 20px 0; 
-                text-align: center;">
-        <h3 style="margin: 0;">🎉 Start Your Free 30-Day Trial Today!</h3>
-        <p style="margin: 10px 0;">Full access to all features • No credit card required • Cancel anytime</p>
+                text-align: center;
+                min-height: 80px;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;">
+        <h3 style="margin: 0; font-size: 1.5em;">🎉 Start Your Free 30-Day Trial Today!</h3>
+        <p style="margin: 10px 0; font-size: 1.1em;">Full access to all features • No credit card required • Cancel anytime</p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -1596,7 +1106,7 @@ def show_signup_form():
             )
         
         with col2:
-            referral_code = st.text_input("Referral Code", placeholder="Enter referral code (optional)")
+            referral_code = st.text_input("Referral Code (Optional)", placeholder="Enter referral code if you have one")
             newsletter = st.checkbox("📧 Subscribe to newsletter for updates and tips", value=True)
         
         st.markdown("### 📜 Terms and Privacy")
@@ -1666,32 +1176,9 @@ def show_signup_form():
                         st.error(f"❌ {message}")
                 except Exception as e:
                     st.error(f"❌ Error creating account: {str(e)}")
-    
-    # Additional information
-    st.markdown("---")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("""
-        **🔒 Your Privacy Matters**
-        - We never sell your data
-        - Secure encrypted storage
-        - GDPR compliant
-        - You own your research data
-        """)
-    
-    with col2:
-        st.markdown("""
-        **💡 What You Get**
-        - 30-day free trial
-        - All premium features
-        - Expert support
-        - Regular updates
-        """)
 
 def show_navigation():
-    """Display comprehensive navigation sidebar"""
+    """Display comprehensive navigation sidebar with logo"""
     # Logo and branding
     try:
         st.sidebar.image(NEOREN_LOGO_URL, width=120)
@@ -1736,7 +1223,6 @@ def show_navigation():
         }
         
         # Feature pages with access control
-        feature_access = {}
         features = [
             ('vectors', '1. 🧬 Vector Selection'),
             ('hosts', '2. 🦠 Host Selection'),
@@ -1748,7 +1234,6 @@ def show_navigation():
         
         for feature_id, feature_name in features:
             has_access = check_user_access(st.session_state.username, feature_id)
-            feature_access[feature_id] = has_access
             
             if has_access:
                 pages[feature_id] = feature_name
@@ -1778,9 +1263,6 @@ def show_navigation():
             st.session_state.page = 'dashboard'
             st.rerun()
         
-        if st.sidebar.button("📊 Usage Stats", use_container_width=True):
-            st.sidebar.info("Feature coming soon!")
-        
         # Logout
         if st.sidebar.button("🚪 Logout", use_container_width=True):
             st.session_state.authenticated = False
@@ -1806,22 +1288,7 @@ def show_navigation():
             st.session_state.show_signup = True
             st.rerun()
     
-    # Quick access demo buttons
-    if not st.session_state.authenticated:
-        st.sidebar.divider()
-        st.sidebar.subheader("🎮 Quick Demo")
-        
-        if st.sidebar.button("⚡ Admin Demo", use_container_width=True, type="primary"):
-            success, user_data = demo_login('admin')
-            if success:
-                st.rerun()
-        
-        if st.sidebar.button("🎓 Student Demo", use_container_width=True):
-            success, user_data = demo_login('student')
-            if success:
-                st.rerun()
-    
-    # About and links
+    # About section
     st.sidebar.divider()
     st.sidebar.markdown("### ℹ️ About")
     
@@ -1854,7 +1321,7 @@ def show_navigation():
     st.sidebar.caption("🌱 Sustainable Biotechnology Solutions")
 
 def show_home_page():
-    """Display comprehensive home page"""
+    """CORRECTED: Display home page WITHOUT public demo buttons"""
     st.markdown("## 🌟 Welcome to RennetOptiMax Pro")
     st.caption("The Future of Protein Expression Optimization")
     
@@ -1866,52 +1333,58 @@ def show_home_page():
     
     with col1:
         st.markdown("""
-        ### 🧬 Revolutionary AI-Powered Platform
+        <div style="min-height: 400px; padding: 20px; line-height: 1.6;">
+        <h3>🧬 Revolutionary AI-Powered Platform</h3>
         
-        **RennetOptiMax Pro** transforms protein expression optimization through cutting-edge 
-        artificial intelligence and machine learning. Specifically engineered for **sustainable 
-        rennet (chymosin) production**, our platform delivers unprecedented accuracy and efficiency.
+        <strong>RennetOptiMax Pro</strong> transforms protein expression optimization through cutting-edge 
+        artificial intelligence and machine learning. Specifically engineered for <strong>sustainable 
+        rennet (chymosin) production</strong>, our platform delivers unprecedented accuracy and efficiency.<br><br>
         
-        **🔬 Why Industry Leaders Choose RennetOptiMax Pro:**
+        <strong>🔬 Why Industry Leaders Choose RennetOptiMax Pro:</strong><br><br>
         
-        🎯 **AI-Driven Predictions**: Advanced machine learning algorithms analyze thousands of 
-        expression parameters to predict optimal conditions with 94% accuracy
+        🎯 <strong>AI-Driven Predictions</strong>: Advanced machine learning algorithms analyze thousands of 
+        expression parameters to predict optimal conditions with 94% accuracy<br><br>
         
-        📊 **Comprehensive Database**: Curated collection of 8+ expression vectors and 8+ specialized 
-        E. coli strains, continuously updated with latest research
+        📊 <strong>Comprehensive Database</strong>: Curated collection of 8+ expression vectors and 8+ specialized 
+        E. coli strains, continuously updated with latest research<br><br>
         
-        ⚡ **Real-Time Analysis**: Instant protein sequence analysis with detailed recommendations 
-        for expression strategy and troubleshooting
+        ⚡ <strong>Real-Time Analysis</strong>: Instant protein sequence analysis with detailed recommendations 
+        for expression strategy and troubleshooting<br><br>
         
-        💰 **Cost Optimization**: Reduce experimental costs by up to 60% through predictive modeling 
-        and first-time-right protocols
+        💰 <strong>Cost Optimization</strong>: Reduce experimental costs by up to 60% through predictive modeling 
+        and first-time-right protocols<br><br>
         
-        🌱 **Sustainability Focus**: Supporting the transition to animal-free, environmentally 
+        🌱 <strong>Sustainability Focus</strong>: Supporting the transition to animal-free, environmentally 
         responsible biotechnology solutions
-        """)
+        </div>
+        """, unsafe_allow_html=True)
     
     with col2:
-        # Enhanced NeoRen branding box
+        # Enhanced NeoRen branding box with FIXED sizing
         st.markdown(f"""
         <div style="border: 3px solid #ff6600; 
                     border-radius: 15px; 
-                    padding: 25px; 
+                    padding: 30px; 
                     text-align: center;
                     background: linear-gradient(135deg, #fff8f0 0%, #ffebdb 100%);
-                    box-shadow: 0 6px 12px rgba(255,102,0,0.1);">
-            <img src="{NEOREN_LOGO_URL}" alt="NeoRen Logo" style="width: 120px; margin-bottom: 15px;">
-            <h3 style="color: #ff6600; margin: 15px 0; font-size: 1.5em;">NeoRen®</h3>
-            <p style="font-size: 14px; color: #666; margin: 10px 0; font-weight: bold;">Engineered for Excellence</p>
-            <p style="font-size: 13px; color: #888; margin: 5px 0;">🧬 Advanced Genetic Engineering</p>
-            <p style="font-size: 13px; color: #888; margin: 5px 0;">🌱 Sustainable Biotechnology</p>
-            <p style="font-size: 13px; color: #888; margin: 5px 0;">🏭 Industrial Solutions</p>
-            <div style="margin-top: 20px;">
+                    box-shadow: 0 6px 12px rgba(255,102,0,0.1);
+                    min-height: 350px;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: center;">
+            <img src="{NEOREN_LOGO_URL}" alt="NeoRen Logo" style="width: 120px; margin-bottom: 20px;">
+            <h3 style="color: #ff6600; margin: 20px 0; font-size: 1.8em;">NeoRen®</h3>
+            <p style="font-size: 16px; color: #666; margin: 15px 0; font-weight: bold;">Engineered for Excellence</p>
+            <p style="font-size: 14px; color: #888; margin: 8px 0;">🧬 Advanced Genetic Engineering</p>
+            <p style="font-size: 14px; color: #888; margin: 8px 0;">🌱 Sustainable Biotechnology</p>
+            <p style="font-size: 14px; color: #888; margin: 8px 0;">🏭 Industrial Solutions</p>
+            <div style="margin-top: 25px;">
                 <a href="{NEOREN_WEBSITE}" target="_blank" style="background: #ff6600; 
                           color: white; 
-                          padding: 8px 16px; 
-                          border-radius: 6px; 
+                          padding: 12px 20px; 
+                          border-radius: 8px; 
                           text-decoration: none; 
-                          font-size: 12px;
+                          font-size: 14px;
                           font-weight: bold;">
                     🌐 Explore Products
                 </a>
@@ -1922,100 +1395,23 @@ def show_home_page():
     # Access plans
     show_access_plans()
     
-    # Demo accounts with enhanced presentation
-    st.markdown("### 🎮 Experience RennetOptiMax Pro Instantly")
-    st.markdown("*No registration required - Start exploring in seconds:*")
+    # CORRECTED: Call to action WITHOUT demo buttons
+    st.markdown("### 🚀 Get Started Today!")
+    st.markdown("*Create your account to access the world's most advanced protein expression platform:*")
     
-    col1, col2, col3 = st.columns(3)
+    col1, col2 = st.columns(2)
     
     with col1:
-# Continuing from the previous code...
-
-        st.markdown(f"""
-        <div style="border: 2px solid #1976d2; 
-                    border-radius: 12px; 
-                    padding: 20px; 
-                    background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
-                    text-align: center;
-                    height: 280px;">
-            <h4 style="color: #1976d2; margin: 0 0 15px 0;">👨‍💼 Administrator Demo</h4>
-            <div style="margin: 15px 0;">
-                <p style="margin: 8px 0; font-size: 14px;"><strong>✅ Complete Platform Access</strong></p>
-                <p style="margin: 8px 0; font-size: 14px;">✅ All Features Unlocked</p>
-                <p style="margin: 8px 0; font-size: 14px;">✅ No Time Restrictions</p>
-                <p style="margin: 8px 0; font-size: 14px;">✅ Full Optimization Suite</p>
-                <p style="margin: 8px 0; font-size: 14px;">✅ Advanced Analytics</p>
-            </div>
-            <div style="margin-top: 20px;">
-                <p style="font-size: 12px; color: #666; margin: 5px 0;">Perfect for: Exploring all capabilities</p>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        if st.button("🚀 Launch Admin Demo", use_container_width=True, type="primary"):
-            success, user_data = demo_login('admin')
-            if success:
-                st.success(f"Welcome {user_data['name']}! Full access granted.")
-                st.balloons()
-                st.rerun()
+        if st.button("📝 Create Free Account", use_container_width=True, type="primary"):
+            st.session_state.show_signup = True
+            st.rerun()
     
     with col2:
-        st.markdown(f"""
-        <div style="border: 2px solid #4caf50; 
-                    border-radius: 12px; 
-                    padding: 20px; 
-                    background: linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%);
-                    text-align: center;
-                    height: 280px;">
-            <h4 style="color: #4caf50; margin: 0 0 15px 0;">🎓 Student Demo</h4>
-            <div style="margin: 15px 0;">
-                <p style="margin: 8px 0; font-size: 14px;"><strong>✅ 30-Day Trial Access</strong></p>
-                <p style="margin: 8px 0; font-size: 14px;">✅ Vector & Host Databases</p>
-                <p style="margin: 8px 0; font-size: 14px;">✅ Basic Optimization</p>
-                <p style="margin: 8px 0; font-size: 14px;">✅ Learning Resources</p>
-                <p style="margin: 8px 0; font-size: 14px;">✅ Community Support</p>
-            </div>
-            <div style="margin-top: 20px;">
-                <p style="font-size: 12px; color: #666; margin: 5px 0;">Perfect for: Students & learners</p>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        if st.button("📚 Start Student Trial", use_container_width=True, type="secondary"):
-            success, user_data = demo_login('student')
-            if success:
-                st.success(f"Welcome {user_data['name']}! Student trial activated.")
-                st.rerun()
+        if st.button("🔑 Login to Existing Account", use_container_width=True):
+            st.session_state.show_login = True
+            st.rerun()
     
-    with col3:
-        st.markdown(f"""
-        <div style="border: 2px solid #ff9800; 
-                    border-radius: 12px; 
-                    padding: 20px; 
-                    background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%);
-                    text-align: center;
-                    height: 280px;">
-            <h4 style="color: #ff9800; margin: 0 0 15px 0;">🧑‍💼 Professional Demo</h4>
-            <div style="margin: 15px 0;">
-                <p style="margin: 8px 0; font-size: 14px;"><strong>✅ 30-Day Trial Access</strong></p>
-                <p style="margin: 8px 0; font-size: 14px;">✅ Advanced Features</p>
-                <p style="margin: 8px 0; font-size: 14px;">✅ Sequence Analysis</p>
-                <p style="margin: 8px 0; font-size: 14px;">✅ Protocol Generation</p>
-                <p style="margin: 8px 0; font-size: 14px;">✅ Priority Support</p>
-            </div>
-            <div style="margin-top: 20px;">
-                <p style="font-size: 12px; color: #666; margin: 5px 0;">Perfect for: Industry professionals</p>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        if st.button("💼 Try Professional", use_container_width=True, type="secondary"):
-            success, user_data = demo_login('professional')
-            if success:
-                st.success(f"Welcome {user_data['name']}! Professional trial started.")
-                st.rerun()
-    
-    # Platform capabilities overview
+    # Platform capabilities
     st.markdown("### 🚀 Platform Capabilities")
     st.markdown("*Comprehensive tools for every aspect of protein expression optimization:*")
     
@@ -2023,115 +1419,60 @@ def show_home_page():
     
     with col1:
         st.markdown("""
-        **🧬 Vector Engineering**
-        - 8+ Expression vectors (pET, pBAD, pMAL, pGEX)
-        - Advanced filtering & search
-        - Compatibility predictions
-        - Performance analytics
-        - Custom recommendations
+        <div style="min-height: 250px; padding: 15px; line-height: 1.5;">
+        <strong>🧬 Vector Engineering</strong><br>
+        • 8+ Expression vectors (pET, pBAD, pMAL, pGEX)<br>
+        • Advanced filtering & search<br>
+        • Compatibility predictions<br>
+        • Performance analytics<br>
+        • Custom recommendations<br><br>
         
-        **🔬 Sequence Analysis**
-        - Comprehensive protein analysis
-        - Aggregation prediction
-        - Solubility assessment
-        - Disulfide bond detection
-        - Rare codon identification
-        """)
+        <strong>🔬 Sequence Analysis</strong><br>
+        • Comprehensive protein analysis<br>
+        • Aggregation prediction<br>
+        • Solubility assessment<br>
+        • Disulfide bond detection<br>
+        • Rare codon identification
+        </div>
+        """, unsafe_allow_html=True)
     
     with col2:
         st.markdown("""
-        **🦠 Host Optimization**
-        - 8+ E. coli strain database
-        - Specialized strain matching
-        - Growth condition optimization
-        - Yield predictions
-        - Toxicity assessments
+        <div style="min-height: 250px; padding: 15px; line-height: 1.5;">
+        <strong>🦠 Host Optimization</strong><br>
+        • 8+ E. coli strain database<br>
+        • Specialized strain matching<br>
+        • Growth condition optimization<br>
+        • Yield predictions<br>
+        • Toxicity assessments<br><br>
         
-        **⚙️ Parameter Tuning**
-        - Temperature optimization
-        - Induction protocols
-        - Media composition
-        - Timing strategies
-        - Additive recommendations
-        """)
+        <strong>⚙️ Parameter Tuning</strong><br>
+        • Temperature optimization<br>
+        • Induction protocols<br>
+        • Media composition<br>
+        • Timing strategies<br>
+        • Additive recommendations
+        </div>
+        """, unsafe_allow_html=True)
     
     with col3:
         st.markdown("""
-        **🎯 AI Predictions**
-        - 94% accuracy ML models
-        - Expression level forecasting
-        - Success probability scoring
-        - Multi-parameter optimization
-        - Confidence intervals
+        <div style="min-height: 250px; padding: 15px; line-height: 1.5;">
+        <strong>🎯 AI Predictions</strong><br>
+        • 94% accuracy ML models<br>
+        • Expression level forecasting<br>
+        • Success probability scoring<br>
+        • Multi-parameter optimization<br>
+        • Confidence intervals<br><br>
         
-        **📊 Results & Reports**
-        - Detailed protocol generation
-        - Visualization dashboards
-        - Export capabilities
-        - Performance tracking
-        - Troubleshooting guides
-        """)
-    
-    # Call to action section
-    st.markdown("### 🚀 Ready to Transform Your Research?")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("""
-        **🔬 For Researchers & Scientists:**
-        - Accelerate your research timelines
-        - Reduce experimental failures
-        - Access expert knowledge
-        - Join our scientific community
-        """)
-        
-        if st.button("🔑 Create Research Account", use_container_width=True, type="primary"):
-            st.session_state.show_signup = True
-            st.rerun()
-    
-    with col2:
-        st.markdown("""
-        **🏭 For Industry & Production:**
-        - Scale up with confidence
-        - Optimize production costs
-        - Ensure consistent quality
-        - Get dedicated support
-        """)
-        
-        st.link_button("🛒 Buy NeoRen Product + Platform Access", NEOREN_WEBSITE, use_container_width=True)
-    
-    # Success stories and testimonials
-    st.markdown("### 💬 What Our Users Say")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.markdown("""
-        > *"RennetOptiMax Pro reduced our optimization time from weeks to days. 
-        The AI predictions were incredibly accurate."*
-        
-        **Dr. Sarah Chen**  
-        Senior Scientist, BioTech Solutions
-        """)
-    
-    with col2:
-        st.markdown("""
-        > *"The platform helped us achieve 85% reduction in failed expressions. 
-        It's now essential to our workflow."*
-        
-        **Prof. Michael Rodriguez**  
-        University of California, Davis
-        """)
-    
-    with col3:
-        st.markdown("""
-        > *"NeoRen's chymosin combined with the platform gave us the perfect 
-        solution for sustainable cheese production."*
-        
-        **Lisa Thompson**  
-        Production Manager, Alpine Dairy
-        """)
+        <strong>📊 Results & Reports</strong><br>
+        • Detailed protocol generation<br>
+        • Visualization dashboards<br>
+        • Export capabilities<br>
+        • Performance tracking<br>
+        • Troubleshooting guides
+        </div>
+        """, unsafe_allow_html=True)
     
     # Footer with comprehensive branding
     st.divider()
@@ -2140,27 +1481,27 @@ def show_home_page():
     
     with col2:
         st.markdown(f"""
-        <div style="text-align: center; padding: 30px; background: #f8f9fa; border-radius: 10px;">
-            <img src="{NEOREN_LOGO_URL}" alt="NeoRen Logo" style="height: 50px; margin-bottom: 15px;">
-            <h4 style="margin: 10px 0; color: #ff6600;">Powered by NeoRen® - Engineered for Excellence</h4>
-            <p style="margin: 10px 0; color: #666; font-size: 14px;">
+        <div style="text-align: center; padding: 40px; background: #f8f9fa; border-radius: 15px; min-height: 200px;">
+            <img src="{NEOREN_LOGO_URL}" alt="NeoRen Logo" style="height: 60px; margin-bottom: 20px;">
+            <h4 style="margin: 15px 0; color: #ff6600; font-size: 1.3em;">Powered by NeoRen® - Engineered for Excellence</h4>
+            <p style="margin: 15px 0; color: #666; font-size: 15px; line-height: 1.5;">
                 🧬 Advanced Genetic Engineering • 🌱 Sustainable Biotechnology • 🏭 Industrial Solutions
             </p>
-            <p style="margin: 5px 0; font-size: 12px; color: #999;">
+            <p style="margin: 10px 0; font-size: 13px; color: #999;">
                 © 2025 NeoRen. All rights reserved. | Version 2.0.0
             </p>
-            <div style="margin-top: 15px;">
-                <a href="{NEOREN_WEBSITE}" target="_blank" style="color: #ff6600; text-decoration: none; margin: 0 10px;">🌐 Website</a>
+            <div style="margin-top: 20px;">
+                <a href="{NEOREN_WEBSITE}" target="_blank" style="color: #ff6600; text-decoration: none; margin: 0 15px; font-size: 14px;">🌐 Website</a>
                 <span style="color: #ccc;">|</span>
-                <a href="mailto:support@neoren.com" style="color: #ff6600; text-decoration: none; margin: 0 10px;">📧 Support</a>
+                <a href="mailto:support@neoren.com" style="color: #ff6600; text-decoration: none; margin: 0 15px; font-size: 14px;">📧 Support</a>
                 <span style="color: #ccc;">|</span>
-                <a href="#" style="color: #ff6600; text-decoration: none; margin: 0 10px;">📚 Documentation</a>
+                <a href="#" style="color: #ff6600; text-decoration: none; margin: 0 15px; font-size: 14px;">📚 Documentation</a>
             </div>
         </div>
         """, unsafe_allow_html=True)
 
+# Placeholder functions for other pages (with access control)
 def show_dashboard():
-    """Display comprehensive user dashboard"""
     if not st.session_state.authenticated:
         st.error("🔒 Please login to access the dashboard.")
         return
@@ -2168,2186 +1509,262 @@ def show_dashboard():
     users = load_users()
     user_data = users.get(st.session_state.username, {})
     
-    # Enhanced header with branding
-    col1, col2, col3 = st.columns([3, 1, 1])
-    
-    with col1:
-        st.markdown(f"## 👋 Welcome back, {user_data.get('name', 'User')}!")
-        st.caption(f"🏷️ {user_data.get('user_type', 'Unknown').title()} Account")
-    
-    with col2:
-        try:
-            st.image(NEOREN_LOGO_URL, width=80)
-        except:
-            st.markdown("**NeoRen®**")
-    
-    with col3:
-        # Quick action button
-        if st.button("🚀 Start Optimization", type="primary"):
-            st.session_state.page = 'vectors'
-            st.rerun()
-    
-    # Account status cards with enhanced metrics
-    st.markdown("### 📊 Account Overview")
+    st.markdown(f"## 🏠 Welcome, {user_data.get('name', 'User')}!")
     
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.metric(
-            "👤 Account Type", 
-            user_data.get('user_type', 'Unknown').title(),
-            help="Your account tier determines available features"
-        )
+        st.metric("👤 Account Type", user_data.get('user_type', 'Unknown').title())
     
     with col2:
         status = user_data.get('subscription_status', 'None')
-        status_emoji = {
-            'trial': '🎁',
-            'active': '✅',
-            'lifetime': '♾️',
-            'expired': '⏰'
-        }.get(status, '❓')
-        
-        st.metric(
-            "📊 Subscription", 
-            f"{status_emoji} {status.title()}",
-            help="Your current subscription status"
-        )
+        st.metric("📊 Status", status.title())
     
     with col3:
         referral_code = user_data.get('referral_code', 'N/A')
-        st.metric(
-            "🔗 Referral Code", 
-            referral_code,
-            help="Share this code to earn rewards"
-        )
+        st.metric("🔗 Referral Code", referral_code)
     
     with col4:
         if user_data.get('subscription_expiry'):
             try:
                 expiry = datetime.fromisoformat(user_data['subscription_expiry'])
                 days_left = (expiry - datetime.now()).days
-                
-                if days_left > 0:
-                    st.metric(
-                        "⏰ Days Remaining", 
-                        max(0, days_left),
-                        delta="Active" if days_left > 7 else "Expiring Soon",
-                        delta_color="normal" if days_left > 7 else "inverse"
-                    )
-                else:
-                    st.metric("⏰ Status", "Expired", delta="Renew Now", delta_color="inverse")
+                st.metric("⏰ Days Left", max(0, days_left))
             except:
                 st.metric("⏰ Access", "Active")
         else:
-            st.metric("⏰ Access", "Lifetime", delta="No Expiry", delta_color="normal")
+            st.metric("⏰ Access", "Lifetime")
     
-    # Feature access overview
-    st.markdown("### 🔓 Feature Access")
-    
-    features = [
-        ('vectors', '🧬 Vector Selection', 'Browse and select expression vectors'),
-        ('hosts', '🦠 Host Selection', 'Choose optimal bacterial strains'),
-        ('sequence', '🔬 Sequence Analysis', 'Analyze protein sequences'),
-        ('parameters', '⚙️ Parameters', 'Configure expression conditions'),
-        ('optimize', '🎯 Optimization', 'AI-powered optimization'),
-        ('results', '📊 Results', 'View and download results')
-    ]
-    
-    access_data = []
-    for feature_id, feature_name, description in features:
-        has_access = check_user_access(st.session_state.username, feature_id)
-        access_data.append({
-            'Feature': feature_name,
-            'Description': description,
-            'Access': "✅ Available" if has_access else "🔒 Upgrade Required",
-            'Status': 'Available' if has_access else 'Locked'
-        })
-    
-    access_df = pd.DataFrame(access_data)
-    
-    # Color-code the access status
-    def color_access_status(val):
-        if 'Available' in val:
-            return 'background-color: #d4edda'
-        elif 'Upgrade Required' in val:
-            return 'background-color: #f8d7da'
-        return ''
-    
-    styled_df = access_df.style.applymap(color_access_status, subset=['Access'])
-    st.dataframe(styled_df, use_container_width=True, hide_index=True)
-    
-    # Usage statistics (mock data for demonstration)
-    st.markdown("### 📈 Usage Statistics")
-    
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric("🧪 Optimizations Run", "47", delta="12 this week")
-    
-    with col2:
-        st.metric("🎯 Success Rate", "89%", delta="5% improvement")
-    
-    with col3:
-        st.metric("⏱️ Time Saved", "156 hours", delta="23 hours this week")
-    
-    with col4:
-        st.metric("💰 Cost Savings", "$12,450", delta="$1,890 this week")
-    
-    # Recent activity and quick actions
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        st.markdown("### 📋 Recent Activity")
-        
-        # Mock recent activity data
-        recent_activities = [
-            {"date": "2025-05-31", "action": "Optimization completed", "details": "pET28a + BL21(DE3) - 94% predicted expression"},
-            {"date": "2025-05-30", "action": "Sequence analyzed", "details": "Chymosin variant - High solubility predicted"},
-            {"date": "2025-05-29", "action": "Vector selected", "details": "pET21a chosen for new project"},
-            {"date": "2025-05-28", "action": "Protocol downloaded", "details": "Optimized expression protocol (PDF)"},
-            {"date": "2025-05-27", "action": "Account created", "details": "Welcome to RennetOptiMax Pro!"}
-        ]
-        
-        for activity in recent_activities:
-            with st.container():
-                st.markdown(f"""
-                <div style="border-left: 3px solid #1976d2; padding-left: 15px; margin: 10px 0;">
-                    <strong>{activity['action']}</strong><br>
-                    <small style="color: #666;">{activity['date']} - {activity['details']}</small>
-                </div>
-                """, unsafe_allow_html=True)
-    
-    with col2:
-        st.markdown("### ⚡ Quick Actions")
-        
-        # Quick action buttons
-        if st.button("🧬 New Optimization", use_container_width=True):
-            st.session_state.page = 'vectors'
-            st.rerun()
-        
-        if st.button("🔬 Analyze Sequence", use_container_width=True):
-            st.session_state.page = 'sequence'
-            st.rerun()
-        
-        if st.button("📊 View Results", use_container_width=True):
-            st.session_state.page = 'results'
-            st.rerun()
-        
-        if st.button("📁 Download Reports", use_container_width=True):
-            st.info("Report download functionality coming soon!")
-        
-        st.divider()
-        
-        # Referral program
-        st.markdown("#### 🔗 Referral Program")
-        
-        referral_code = user_data.get('referral_code', 'N/A')
-        st.code(f"Code: {referral_code}")
-        
-        if st.button("📧 Share Code", use_container_width=True):
-            st.success("Referral link copied to clipboard!")
-        
-        st.caption("Earn rewards by referring colleagues!")
-    
-    # Subscription management
-    st.markdown("### 💳 Subscription Management")
-    
-    subscription_status = user_data.get('subscription_status', 'none')
-    
-    if subscription_status == 'trial':
-        col1, col2 = st.columns([2, 1])
-        
-        with col1:
-            st.info("🎁 You're currently on a free trial. Upgrade to continue using all features after trial expires.")
-            
-            # Show trial expiry
-            trial_expiry = user_data.get('trial_expiry')
-            if trial_expiry:
-                try:
-                    expiry_date = datetime.fromisoformat(trial_expiry)
-                    days_left = (expiry_date - datetime.now()).days
-                    st.warning(f"⏰ Trial expires in {max(0, days_left)} days")
-                except:
-                    pass
-            
-            # Upgrade options
-            user_type = st.selectbox(
-                "Select Plan Type", 
-                ["student", "academic", "professional"],
-                index=["student", "academic", "professional"].index(user_data.get('user_type', 'professional')),
-                format_func=lambda x: {
-                    "student": "🎓 Student - Best Value",
-                    "academic": "🧪 Academic Researcher", 
-                    "professional": "🧑‍💼 Industry Professional"
-                }[x]
-            )
-            
-            plan_duration = st.selectbox(
-                "Select Duration", 
-                ["1_month", "6_months", "1_year"],
-                format_func=lambda x: {
-                    "1_month": "1 Month",
-                    "6_months": "6 Months (17% off)",
-                    "1_year": "1 Year (30% off)"
-                }[x]
-            )
-            
-            price = PRICING_PLANS[user_type][plan_duration]
-            st.markdown(f"**💰 Price: ${price}**")
-        
-        with col2:
-            st.markdown("#### 🎯 Upgrade Benefits")
-            st.markdown("""
-            - ✅ Unlimited optimizations
-            - ✅ Advanced analytics
-            - ✅ Priority support
-            - ✅ Export capabilities
-            - ✅ Custom protocols
-            """)
-            
-            if st.button("💳 Upgrade Now", use_container_width=True, type="primary"):
-                st.success("🚀 Upgrade functionality would redirect to payment gateway")
-                st.balloons()
-    
-    elif subscription_status == 'active':
-        st.success("✅ Your subscription is active!")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            if st.button("🔄 Manage Subscription", use_container_width=True):
-                st.info("Subscription management portal would open here")
-        
-        with col2:
-            if st.button("📧 Billing History", use_container_width=True):
-                st.info("Billing history would be displayed here")
-    
-    elif subscription_status == 'lifetime':
-        st.success("♾️ You have lifetime access! Thank you for being a valued user.")
-        
-        # Show special benefits for lifetime users
-        st.markdown("""
-        **🌟 Lifetime Member Benefits:**
-        - ✅ Unlimited access to all features
-        - ✅ Priority support and beta features
-        - ✅ Exclusive webinars and training
-        - ✅ Direct feedback channel to development team
-        """)
-    
-    # Product promotion
-    st.markdown("### 🛒 NeoRen Products")
-    
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        st.markdown("""
-        **Enhance your research with NeoRen's premium chymosin powder:**
-        
-        🧬 **NeoRen Chymosin Powder (500g)**
-        - 100% animal-free sustainable rennet
-        - Superior performance for cheese production
-        - Consistent quality and reliability
-        - **Purchase includes 1 year of platform access!**
-        """)
-        
-        st.link_button("🛒 Shop NeoRen Products", NEOREN_WEBSITE, use_container_width=True, type="primary")
-    
-    with col2:
-        st.markdown(f"""
-        <div style="text-align: center; background: #fff8f0; padding: 20px; border-radius: 10px; border: 2px solid #ff6600;">
-            <img src="{NEOREN_LOGO_URL}" alt="NeoRen" style="width: 80px; margin-bottom: 10px;">
-            <h4 style="color: #ff6600; margin: 10px 0;">Special Offer</h4>
-            <p style="font-size: 14px; margin: 5px 0;">Buy any NeoRen product and get:</p>
-            <p style="font-size: 16px; font-weight: bold; color: #ff6600; margin: 10px 0;">1 Year Platform Access</p>
-            <p style="font-size: 12px; color: #666;">Worth $85+ value</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-def show_vectors_page():
-    """Display comprehensive vector selection page"""
-    username = st.session_state.username
-    
-    if not username or not check_user_access(username, 'vectors'):
-        show_restricted_feature("Vector Selection")
-        return
-    
-    # Enhanced header
-    col1, col2, col3 = st.columns([3, 1, 1])
-    
-    with col1:
-        st.markdown("## 🧬 Expression Vector Selection")
-        st.caption("Choose the optimal expression vector for your protein")
-    
-    with col2:
-        try:
-            st.image(NEOREN_LOGO_URL, width=60)
-        except:
-            pass
-    
-    with col3:
-        if st.button("❓ Vector Guide", help="Get help choosing vectors"):
-            st.info("Vector selection guide would open here")
-    
-    # Load vector database
-    vectors = load_vectors()
-    
-    # Enhanced filter controls
-    st.markdown("### 🔍 Advanced Filters")
-    
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        promoter_options = ["All"] + sorted(set(v.promoter for v in vectors))
-        promoter_filter = st.selectbox("Promoter Type", promoter_options)
-    
-    with col2:
-        selection_options = ["All"] + sorted(set(v.selection_marker for v in vectors))
-        selection_filter = st.selectbox("Selection Marker", selection_options)
-    
-    with col3:
-        # Get unique tags
-        all_tags = set()
-        for v in vectors:
-            all_tags.update(v.tags)
-        tag_options = ["All"] + sorted(all_tags)
-        tag_filter = st.selectbox("Tag Type", tag_options)
-    
-    with col4:
-        # Expression level filter
-        expression_filter = st.selectbox("Expression Level", ["All", "Very High", "High", "Medium", "Low"])
-    
-    # Apply filters
-    filtered_vectors = vectors
-    
-    if promoter_filter != "All":
-        filtered_vectors = [v for v in filtered_vectors if v.promoter == promoter_filter]
-    
-    if selection_filter != "All":
-        filtered_vectors = [v for v in filtered_vectors if v.selection_marker == selection_filter]
-    
-    if tag_filter != "All":
-        filtered_vectors = [v for v in filtered_vectors if tag_filter in v.tags]
-    
-    if expression_filter != "All":
-        filtered_vectors = [v for v in filtered_vectors 
-                          if v.features.get('expression_level', 'Medium') == expression_filter]
-    
-    # Display results count and sorting
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        st.markdown(f"### 🧬 Available Vectors ({len(filtered_vectors)} found)")
-    
-    with col2:
-        sort_by = st.selectbox("Sort by", ["Name", "Size", "Expression Level", "Promoter"])
-        
-        if sort_by == "Name":
-            filtered_vectors.sort(key=lambda v: v.name)
-        elif sort_by == "Size":
-            filtered_vectors.sort(key=lambda v: v.size)
-        elif sort_by == "Expression Level":
-            expression_order = {"Very High": 4, "High": 3, "Medium": 2, "Low": 1}
-            filtered_vectors.sort(key=lambda v: expression_order.get(v.features.get('expression_level', 'Medium'), 2), reverse=True)
-        elif sort_by == "Promoter":
-            filtered_vectors.sort(key=lambda v: v.promoter)
-    
-    # Display vectors with enhanced cards
-    if not filtered_vectors:
-        st.warning("🔍 No vectors match the selected filters. Please adjust your criteria.")
-        if st.button("🔄 Reset All Filters"):
-            st.rerun()
-    else:
-        # Display vectors in rows of 2 for better readability
-        for i in range(0, len(filtered_vectors), 2):
-            row_vectors = filtered_vectors[i:i+2]
-            cols = st.columns(2)
-            
-            for j, vector in enumerate(row_vectors):
-                if j < len(cols):
-                    with cols[j]:
-                        selected = st.session_state.selected_vector and st.session_state.selected_vector.id == vector.id
-                        
-                        # Enhanced vector card with more details
-                        card_color = "#e3f2fd" if selected else "white"
-                        border_color = "#1976d2" if selected else "#e0e0e0"
-                        border_width = "3px" if selected else "1px"
-                        
-                        expression_level = vector.features.get('expression_level', 'Medium')
-                        expression_color = {
-                            'Very High': '#4caf50',
-                            'High': '#8bc34a', 
-                            'Medium': '#ff9800',
-                            'Low': '#f44336'
-                        }.get(expression_level, '#666')
-                        
-                        st.markdown(f"""
-                        <div style="border: {border_width} solid {border_color}; 
-                                    border-radius: 12px; 
-                                    padding: 20px; 
-                                    background-color: {card_color};
-                                    margin-bottom: 10px;
-                                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                                <h4 style="color: {'#1976d2' if selected else 'black'}; margin: 0;">{vector.name}</h4>
-                                <span style="background: {expression_color}; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px;">
-                                    {expression_level}
-                                </span>
-                            </div>
-                            
-                            <div style="margin: 10px 0;">
-                                <p style="margin: 5px 0;"><strong>📏 Size:</strong> {vector.size:,} bp</p>
-                                <p style="margin: 5px 0;"><strong>🧬 Promoter:</strong> {vector.promoter}</p>
-                                <p style="margin: 5px 0;"><strong>🛡️ Selection:</strong> {vector.selection_marker}</p>
-                                <p style="margin: 5px 0;"><strong>🏷️ Tags:</strong> {', '.join(vector.tags)}</p>
-                            </div>
-                            
-                            <div style="margin: 15px 0;">
-                                <p style="margin: 5px 0; font-size: 13px; color: #666;">
-                                    <strong>Description:</strong> {vector.description}
-                                </p>
-                            </div>
-                            
-                            <div style="margin: 10px 0;">
-                                <p style="margin: 5px 0; font-size: 12px;"><strong>🔧 Features:</strong></p>
-                                <ul style="margin: 5px 0; font-size: 12px; color: #666;">
-                                    <li>Cloning sites: {', '.join(vector.features.get('cloning_sites', []))}</li>
-                                    <li>Induction: {vector.features.get('induction', 'IPTG')}</li>
-                                    <li>Copy number: {vector.features.get('copy_number', 'Medium')}</li>
-                                </ul>
-                            </div>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                        # Action buttons
-                        col1, col2 = st.columns(2)
-                        
-                        with col1:
-                            btn_label = "✅ Selected" if selected else "Select Vector"
-                            btn_type = "primary" if selected else "secondary"
-                            
-                            if st.button(btn_label, key=f"select_vector_{vector.id}", 
-                                        use_container_width=True, type=btn_type):
-                                st.session_state.selected_vector = vector
-                                st.success(f"Vector {vector.name} selected!")
-                                st.rerun()
-                        
-                        with col2:
-                            if st.button("📋 Details", key=f"details_vector_{vector.id}", 
-                                        use_container_width=True):
-                                # Show detailed information in expandable section
-                                with st.expander(f"📋 {vector.name} - Detailed Information", expanded=True):
-                                    
-                                    col1, col2 = st.columns(2)
-                                    
-                                    with col1:
-                                        st.markdown("**🧬 Basic Information:**")
-                                        st.markdown(f"- **Name:** {vector.name}")
-                                        st.markdown(f"- **Size:** {vector.size:,} bp")
-                                        st.markdown(f"- **Promoter:** {vector.promoter}")
-                                        st.markdown(f"- **Terminator:** {vector.terminator}")
-                                        st.markdown(f"- **Origin:** {vector.origin}")
-                                        st.markdown(f"- **Selection Marker:** {vector.selection_marker}")
-                                    
-                                    with col2:
-                                        st.markdown("**🏷️ Tags & Features:**")
-                                        for tag in vector.tags:
-                                            st.markdown(f"- {tag}")
-                                        
-                                        st.markdown("**⚙️ Technical Details:**")
-                                        st.markdown(f"- **Expression Level:** {vector.features.get('expression_level', 'Medium')}")
-                                        st.markdown(f"- **Copy Number:** {vector.features.get('copy_number', 'Medium')}")
-                                        st.markdown(f"- **Induction:** {vector.features.get('induction', 'IPTG')}")
-                                        
-                                        if 'cloning_sites' in vector.features:
-                                            st.markdown("**🔧 Cloning Sites:**")
-                                            for site in vector.features['cloning_sites']:
-                                                st.markdown(f"- {site}")
-                                    
-                                    st.markdown("**📝 Description:**")
-                                    st.markdown(vector.description)
-                                    
-                                    # Recommendations based on vector properties
-                                    st.markdown("**💡 Recommendations:**")
-                                    
-                                    if vector.promoter == "T7":
-                                        st.info("🧬 T7 promoter: Use with DE3 strains for high expression levels")
-                                    
-                                    if "His-tag" in vector.tags:
-                                        st.info("🏷️ His-tag: Enables easy purification with Ni-NTA columns")
-                                    
-                                    if "pelB" in vector.tags:
-                                        st.info("🚪 pelB signal: Directs protein to periplasm, may improve folding")
-                                    
-                                    if vector.features.get('expression_level') == 'Very High':
-                                        st.warning("⚠️ Very high expression: Monitor for inclusion body formation")
-    
-    # Selection summary
-    if st.session_state.selected_vector:
-        st.success(f"✅ **Selected Vector:** {st.session_state.selected_vector.name}")
-        
-        col1, col2 = st.columns([3, 1])
-        
-        with col1:
-            st.markdown(f"**Description:** {st.session_state.selected_vector.description}")
-        
-        with col2:
-            if st.button("➡️ Continue to Host Selection", type="primary", use_container_width=True):
-                st.session_state.page = 'hosts'
-                st.rerun()
-    else:
-        st.info("👆 Please select a vector to continue with the optimization process.")
-
-def show_hosts_page():
-    """Display comprehensive host selection page"""
-    username = st.session_state.username
-    
-    if not username or not check_user_access(username, 'hosts'):
-        show_restricted_feature("Host Selection")
-        return
-    
-    # Enhanced header
-    col1, col2, col3 = st.columns([3, 1, 1])
-    
-    with col1:
-        st.markdown("## 🦠 Host Strain Selection")
-        st.caption("Choose the optimal bacterial strain for your expression")
-    
-    with col2:
-        try:
-            st.image(NEOREN_LOGO_URL, width=60)
-        except:
-            pass
-    
-    with col3:
-        if st.button("❓ Host Guide", help="Get help choosing host strains"):
-            st.info("Host selection guide would open here")
-    
-    # Load host database
-    hosts = load_hosts()
-    
-    # Show current vector selection if available
-    if st.session_state.selected_vector:
-        st.info(f"🧬 **Selected Vector:** {st.session_state.selected_vector.name} - Now choose a compatible host strain")
-    else:
-        st.warning("⚠️ No vector selected. Please select a vector first for optimal host recommendations.")
-    
-    # Enhanced filter controls
-    st.markdown("### 🔍 Host Filters")
-    
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        species_options = ["All"] + sorted(set(h.species for h in hosts))
-        species_filter = st.selectbox("Species", species_options)
-    
-    with col2:
-        # Get unique features
-        all_features = set()
-        for h in hosts:
-            all_features.update(h.features)
-        feature_options = ["All"] + sorted(all_features)
-        feature_filter = st.selectbox("Key Feature", feature_options)
-    
-    with col3:
-        # Special capabilities
-        special_filter = st.selectbox("Special Capability", 
-                                    ["All", "T7 expression", "Rare codons", "Membrane proteins", 
-                                     "Disulfide bonds", "Cold expression", "Toxic proteins"])
-    
-    with col4:
-        # Recommendation based on protein properties
-        if st.session_state.sequence_analysis:
-            protein_props = st.session_state.sequence_analysis.get('protein_properties', {})
-            auto_recommend = st.checkbox("🤖 Auto-recommend based on sequence", value=True)
-        else:
-            auto_recommend = st.checkbox("🤖 Auto-recommend", value=False, disabled=True, 
-                                       help="Analyze a sequence first for auto-recommendations")
-    
-    # Apply filters
-    filtered_hosts = hosts
-    
-    if species_filter != "All":
-        filtered_hosts = [h for h in filtered_hosts if h.species == species_filter]
-    
-    if feature_filter != "All":
-        filtered_hosts = [h for h in filtered_hosts if feature_filter in h.features]
-    
-    if special_filter != "All":
-        filtered_hosts = [h for h in filtered_hosts if special_filter in h.features]
-    
-    # Auto-recommendation logic
-    if auto_recommend and st.session_state.sequence_analysis:
-        protein_props = st.session_state.sequence_analysis.get('protein_properties', {})
-        
-        st.markdown("### 🤖 AI Recommendations Based on Your Protein")
-        
-        recommendations = []
-        
-        if protein_props.get('has_disulfide_bonds'):
-            recommendations.append("SHuffle T7 or Origami(DE3) for disulfide bond formation")
-        
-        if protein_props.get('is_membrane_protein'):
-            recommendations.append("C41(DE3) for membrane protein expression")
-        
-        if protein_props.get('is_toxic'):
-            recommendations.append("BL21(DE3)pLysS for toxic proteins")
-        
-        if protein_props.get('size', 0) > 70:
-            recommendations.append("ArcticExpress(DE3) for large proteins requiring chaperones")
-        
-        if not recommendations:
-            recommendations.append("BL21(DE3) or Rosetta(DE3) for standard proteins")
-        
-        for rec in recommendations:
-            st.success(f"💡 **Recommended:** {rec}")
-    
-    # Display results count and sorting
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        st.markdown(f"### 🦠 Available Host Strains ({len(filtered_hosts)} found)")
-    
-    with col2:
-        sort_by = st.selectbox("Sort by", ["Name", "Species", "Compatibility"])
-        
-        if sort_by == "Name":
-            filtered_hosts.sort(key=lambda h: h.strain)
-        elif sort_by == "Species":
-            filtered_hosts.sort(key=lambda h: h.species)
-        elif sort_by == "Compatibility":
-            # Sort by compatibility with selected vector and sequence
-            filtered_hosts.sort(key=lambda h: len(h.features), reverse=True)
-    
-    # Display hosts with enhanced cards
-    if not filtered_hosts:
-        st.warning("🔍 No host strains match the selected filters. Please adjust your criteria.")
-        if st.button("🔄 Reset All Filters"):
-            st.rerun()
-    else:
-        # Display hosts in rows of 2
-        for i in range(0, len(filtered_hosts), 2):
-            row_hosts = filtered_hosts[i:i+2]
-            cols = st.columns(2)
-            
-            for j, host in enumerate(row_hosts):
-                if j < len(cols):
-                    with cols[j]:
-                        selected = st.session_state.selected_host and st.session_state.selected_host.id == host.id
-                        
-                        # Calculate compatibility score
-                        compatibility_score = 3  # Base score
-                        
-                        if st.session_state.sequence_analysis:
-                            protein_props = st.session_state.sequence_analysis.get('protein_properties', {})
-                            
-                            if protein_props.get('has_disulfide_bonds') and "Disulfide bond formation" in host.features:
-                                compatibility_score += 2
-                            elif protein_props.get('has_disulfide_bonds') and "Disulfide bond formation" not in host.features:
-                                compatibility_score -= 1
-                            
-                            if protein_props.get('is_membrane_protein') and "Membrane protein expression" in host.features:
-                                compatibility_score += 2
-                            elif protein_props.get('is_membrane_protein') and "Membrane protein expression" not in host.features:
-                                compatibility_score -= 1
-                            
-                            if protein_props.get('is_toxic') and "Toxic protein compatible" in host.features:
-                                compatibility_score += 2
-                            elif protein_props.get('is_toxic') and "Toxic protein compatible" not in host.features:
-                                compatibility_score -= 1
-                        
-                        compatibility_score = max(1, min(5, compatibility_score))
-                        
-                        # Enhanced host card
-                        card_color = "#e8f5e8" if selected else "white"
-                        border_color = "#4caf50" if selected else "#e0e0e0"
-                        border_width = "3px" if selected else "1px"
-                        
-                        compatibility_stars = "⭐" * compatibility_score
-                        compatibility_color = ["#f44336", "#ff9800", "#ffc107", "#8bc34a", "#4caf50"][compatibility_score-1]
-                        
-                        st.markdown(f"""
-                        <div style="border: {border_width} solid {border_color}; 
-                                    border-radius: 12px; 
-                                    padding: 20px; 
-                                    background-color: {card_color};
-                                    margin-bottom: 10px;
-                                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                                <h4 style="color: {'#4caf50' if selected else 'black'}; margin: 0;">{host.strain}</h4>
-                                <div style="text-align: right;">
-                                    <div style="color: {compatibility_color}; font-size: 14px;">{compatibility_stars}</div>
-                                    <small style="color: #666;">Compatibility</small>
-                                </div>
-                            </div>
-                            
-                            <div style="margin: 10px 0;">
-                                <p style="margin: 5px 0;"><strong>🧬 Species:</strong> {host.species}</p>
-                                <p style="margin: 5px 0; font-size: 13px; color: #666;">
-                                    <strong>Description:</strong> {host.description}
-                                </p>
-                            </div>
-                            
-                            <div style="margin: 15px 0;">
-                                <p style="margin: 5px 0; font-size: 12px;"><strong>✅ Features:</strong></p>
-                                <div style="margin: 5px 0;">
-                        """, unsafe_allow_html=True)
-                        
-                        # Display features as badges
-                        feature_html = ""
-                        for feature in host.features:
-                            feature_html += f'<span style="background: #e3f2fd; color: #1976d2; padding: 2px 6px; border-radius: 3px; font-size: 11px; margin: 2px;">{feature}</span> '
-                        
-                        st.markdown(feature_html, unsafe_allow_html=True)
-                        
-                        # Display limitations if any
-                        if host.limitations:
-                            st.markdown(f"""
-                                </div>
-                            </div>
-                            
-                            <div style="margin: 10px 0;">
-                                <p style="margin: 5px 0; font-size: 12px;"><strong>⚠️ Limitations:</strong></p>
-                                <ul style="margin: 5px 0; font-size: 11px; color: #666;">
-                            """, unsafe_allow_html=True)
-                            
-                            for limitation in host.limitations:
-                                st.markdown(f"<li>{limitation}</li>", unsafe_allow_html=True)
-                            
-                            st.markdown("</ul></div></div>", unsafe_allow_html=True)
-                        else:
-                            st.markdown("</div></div></div>", unsafe_allow_html=True)
-                        
-                        # Action buttons
-                        col1, col2 = st.columns(2)
-                        
-                        with col1:
-                            btn_label = "✅ Selected" if selected else "Select Host"
-                            btn_type = "primary" if selected else "secondary"
-                            
-                            if st.button(btn_label, key=f"select_host_{host.id}", 
-                                        use_container_width=True, type=btn_type):
-                                st.session_state.selected_host = host
-                                st.success(f"Host {host.strain} selected!")
-                                st.rerun()
-                        
-                        with col2:
-                            if st.button("📋 Details", key=f"details_host_{host.id}", 
-                                        use_container_width=True):
-                                # Show detailed information
-                                with st.expander(f"📋 {host.strain} - Detailed Information", expanded=True):
-                                    
-                                    col1, col2 = st.columns(2)
-                                    
-                                    with col1:
-                                        st.markdown("**🦠 Basic Information:**")
-                                        st.markdown(f"- **Strain:** {host.strain}")
-                                        st.markdown(f"- **Species:** {host.species}")
-                                        st.markdown(f"- **Compatibility:** {compatibility_stars} ({compatibility_score}/5)")
-                                        
-                                        st.markdown("**🧬 Genotype:**")
-                                        st.markdown(f"``````")
-                                    
-                                    with col2:
-                                        st.markdown("**✅ Features & Capabilities:**")
-                                        for feature in host.features:
-                                            st.markdown(f"- {feature}")
-                                        
-                                        if host.limitations:
-                                            st.markdown("**⚠️ Limitations:**")
-                                            for limitation in host.limitations:
-                                                st.markdown(f"- {limitation}")
-                                    
-                                    st.markdown("**📝 Description:**")
-                                    st.markdown(host.description)
-                                    
-                                    # Usage recommendations
-                                    st.markdown("**💡 Usage Recommendations:**")
-                                    
-                                    if "T7 expression" in host.features:
-                                        st.info("🧬 T7 Expression: Compatible with pET vectors and IPTG induction")
-                                    
-                                    if "Rare codon optimization" in host.features:
-                                        st.info("🔤 Rare Codons: Ideal for proteins with rare codon usage")
-                                    
-                                    if "Membrane protein expression" in host.features:
-                                        st.info("🧪 Membrane Proteins: Optimized for challenging membrane proteins")
-                                    
-                                    if "Disulfide bond formation" in host.features:
-                                        st.info("🔗 Disulfide Bonds: Enhanced cytoplasmic disulfide formation")
-                                    
-                                    if "Toxic protein compatible" in host.features:
-                                        st.info("⚠️ Toxic Proteins: Reduced leaky expression for toxic proteins")
-    
-    # Selection summary
-    if st.session_state.selected_host:
-        st.success(f"✅ **Selected Host:** {st.session_state.selected_host.strain}")
-        
-        col1, col2 = st.columns([3, 1])
-        
-        with col1:
-            st.markdown(f"**Description:** {st.session_state.selected_host.description}")
-        
-        with col2:
-            if st.button("➡️ Continue to Sequence Analysis", type="primary", use_container_width=True):
-                st.session_state.page = 'sequence'
-                st.rerun()
-    else:
-        st.info("👆 Please select a host strain to continue with the optimization process.")
-    
-    # Combination preview
-    if st.session_state.selected_vector and st.session_state.selected_host:
-        st.markdown("### 🔬 Selected Combination Preview")
-        
-        with st.container():
-            st.markdown(f"""
-            <div style="background: linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%); 
-                        padding: 20px; 
-                        border-radius: 10px; 
-                        border-left: 5px solid #4caf50;">
-                <h4 style="margin: 0 0 10px 0; color: #2e7d32;">🧬 Expression System Summary</h4>
-                <div style="display: flex; justify-content: space-between;">
-                    <div>
-                        <strong>Vector:</strong> {st.session_state.selected_vector.name}<br>
-                        <strong>Host:</strong> {st.session_state.selected_host.strain}<br>
-                        <strong>Promoter:</strong> {st.session_state.selected_vector.promoter}<br>
-                        <strong>Selection:</strong> {st.session_state.selected_vector.selection_marker}
-                    </div>
-                    <div style="text-align: right;">
-                        <strong style="color: #2e7d32;">✅ Ready for Optimization!</strong><br>
-                        <small>This combination is compatible and ready for parameter optimization.</small>
-                    </div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-
-def show_sequence_page():
-    """Display comprehensive sequence analysis page"""
-    username = st.session_state.username
-    
-    if not username or not check_user_access(username, 'sequence'):
-        show_restricted_feature("Sequence Analysis")
-        return
-    
-    # Enhanced header
-    col1, col2, col3 = st.columns([3, 1, 1])
-    
-    with col1:
-        st.markdown("## 🔬 Protein Sequence Analysis")
-        st.caption("Analyze your protein sequence for optimal expression conditions")
-    
-    with col2:
-        try:
-            st.image(NEOREN_LOGO_URL, width=60)
-        except:
-            pass
-    
-    with col3:
-        if st.button("📚 Analysis Guide", help="Learn about sequence analysis"):
-            st.info("Sequence analysis guide would open here")
-    
-    # Show current selections
-    if st.session_state.selected_vector or st.session_state.selected_host:
-        with st.expander("🔬 Current Expression System", expanded=False):
-            if st.session_state.selected_vector:
-                st.markdown(f"**🧬 Vector:** {st.session_state.selected_vector.name}")
-            if st.session_state.selected_host:
-                st.markdown(f"**🦠 Host:** {st.session_state.selected_host.strain}")
-    
-    # Input methods tabs
-    tab1, tab2, tab3, tab4 = st.tabs(["✍️ Input Sequence", "📁 Upload File", "🧬 Sample Sequences", "📊 Analysis Results"])
-    
-    with tab1:
-        st.markdown("### ✍️ Enter Your Protein Sequence")
-        
-        # Sequence input
-        sequence_text = st.text_area(
-            "Protein Sequence (Single letter amino acid code):",
-            value=st.session_state.protein_sequence,
-            height=200,
-            help="Enter your protein sequence using single letter amino acid codes (A, C, D, E, F, G, H, I, K, L, M, N, P, Q, R, S, T, V, W, Y)",
-            placeholder="Example: MGSSHHHHHHSSGLVPRGSHMQCVVLVTLLCFAACSAVCEPRC..."
-        )
-        
-        # Sequence validation
-        if sequence_text:
-            cleaned_seq = re.sub(r'[^A-Za-z]', '', sequence_text.upper())
-            valid_aas = set('ACDEFGHIKLMNPQRSTVWY')
-            invalid_chars = set(cleaned_seq) - valid_aas
-            
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                st.metric("Sequence Length", f"{len(cleaned_seq)} aa")
-            
-            with col2:
-                if invalid_chars:
-                    st.metric("Validation", "❌ Invalid", delta=f"Invalid: {', '.join(invalid_chars)}")
-                else:
-                    st.metric("Validation", "✅ Valid")
-            
-            with col3:
-                est_mw = len(cleaned_seq) * 110 / 1000
-                st.metric("Est. MW", f"{est_mw:.1f} kDa")
-        
-        # Analysis controls
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            if st.button("🔬 Analyze Sequence", type="primary", use_container_width=True):
-                if not sequence_text:
-                    st.error("❌ Please enter a protein sequence.")
-                else:
-                    with st.spinner("🧠 Analyzing sequence... This may take a moment."):
-                        st.session_state.protein_sequence = sequence_text
-                        st.session_state.sequence_analysis = analyze_protein_sequence(sequence_text)
-                        st.success("✅ Analysis complete!")
-                        st.rerun()
-        
-        with col2:
-            if st.button("🗑️ Clear Sequence", use_container_width=True):
-                st.session_state.protein_sequence = ""
-                st.session_state.sequence_analysis = None
-                st.rerun()
-    
-    with tab2:
-        st.markdown("### 📁 Upload Sequence File")
-        
-        uploaded_file = st.file_uploader(
-            "Choose a FASTA file", 
-            type=['fasta', 'fa', 'faa', 'txt'],
-            help="Upload a FASTA format file containing your protein sequence"
-        )
-        
-        if uploaded_file is not None:
-            try:
-                # Read the file
-                file_content = uploaded_file.read().decode("utf-8")
-                
-                # Parse FASTA
-                sequences = parse_fasta(file_content)
-                
-                if sequences:
-                    st.success(f"✅ Found {len(sequences)} sequence(s) in the file.")
-                    
-                    # Display sequences for selection
-                    if len(sequences) > 1:
-                        st.markdown("**Select a sequence to analyze:**")
-                        
-                        for i, seq in enumerate(sequences):
-                            with st.expander(f"Sequence {i+1}: {seq['id']}", expanded=i==0):
-                                st.markdown(f"**ID:** {seq['id']}")
-                                st.markdown(f"**Description:** {seq['description']}")
-                                st.markdown(f"**Length:** {len(seq['sequence'])} amino acids")
-                                st.text_area(f"Sequence {i+1}:", value=seq['sequence'], height=100, key=f"seq_{i}", disabled=True)
-                                
-                                if st.button(f"🔬 Analyze Sequence {i+1}", key=f"analyze_{i}"):
-                                    with st.spinner("🧠 Analyzing sequence..."):
-                                        st.session_state.protein_sequence = seq['sequence']
-                                        st.session_state.sequence_analysis = analyze_protein_sequence(seq['sequence'])
-                                        st.success("✅ Analysis complete!")
-                                        st.rerun()
-                    else:
-                        # Single sequence
-                        seq = sequences[0]
-                        st.markdown(f"**ID:** {seq['id']}")
-                        st.markdown(f"**Description:** {seq['description']}")
-                        st.markdown(f"**Length:** {len(seq['sequence'])} amino acids")
-                        st.text_area("Sequence:", value=seq['sequence'], height=150, disabled=True)
-                        
-                        if st.button("🔬 Analyze This Sequence", type="primary", use_container_width=True):
-                            with st.spinner("🧠 Analyzing sequence..."):
-                                st.session_state.protein_sequence = seq['sequence']
-                                st.session_state.sequence_analysis = analyze_protein_sequence(seq['sequence'])
-                                st.success("✅ Analysis complete!")
-                                st.rerun()
-                else:
-                    st.error("❌ No valid sequences found in the file. Please check the file format.")
-                    
-            except Exception as e:
-                st.error(f"❌ Error reading file: {str(e)}")
-    
-    with tab3:
-        st.markdown("### 🧬 Sample Protein Sequences")
-        st.caption("Try our platform with these example sequences")
-        
-        sample_sequences = {
-            "Rennet (Chymosin) - Bovine": {
-                "sequence": "MEMKFLIFVLTILVLPVFGNLLVYAPFDEEPQQPWQVLSLRYNTKETCEKLVLLDLNQAPLPWHVTVQEDGRCLGGHLEAHQLYCNVTKSEHFRLATHLNDVVLAPTFCQESIENDSKLVLLDVDLPLSHFQLSAAPGTTLEASPNFISHYGIQHLCPNDIYPAGNCSEEGMDLRVTVSSTMDPNQLFTLQISRPWIVIGSDCPLDGLDCEPGYPCDFHPKYGQDGTVPFLVYEAYKSWKQTGVEILQTYCIYPSVVSPHCTSPTSSEPAPQDTVSLTIINHEIPYSQEALVRFENGSKNFRLGEHYLKACGETAYVWHEARKTNRFQVESFKESNTYLMHNLLDKYNCNVGFMPAYGFDQIIEGEEIVLRHSGEFAFSPETPASYTCVNEIFLRPTSNAYLKAQSCWAIPLFNSVPSTLMYMKYCGWSTANPDEIEIGSNSSHYKRTFGQNLDSSDKLNFTDMAGEVISVAITKSQGEKSDHHHHHHHSRSAAGRLEHHHHHH",
-                "description": "Bovine chymosin (rennet) - the classic milk-clotting enzyme used in cheese production",
-                "properties": "Aspartic protease, 35.6 kDa, optimal pH 6.0, contains disulfide bonds"
-            },
-            "GFP (Green Fluorescent Protein)": {
-                "sequence": "MVSKGEELFTGVVPILVELDGDVNGHKFSVSGEGEGDATYGKLTLKFICTTGKLPVPWPTLVTTLTYGVQCFSRYPDHMKQHDFFKSAMPEGYVQERTIFFKDDGNYKTRAEVKFEGDTLVNRIELKGIDFKEDGNILGHKLEYNYNSHNVYIMADKQKNGIKVNFKIRHNIEDGSVQLADHYQQNTPIGDGPVLLPDNHYLSTQSALSKDPNEKRDHMVLLEFVTAAGITLGMDELYK",
-                "description": "Green Fluorescent Protein from Aequorea victoria - commonly used reporter protein",
-                "properties": "Fluorescent protein, 26.9 kDa, stable beta-barrel structure, no disulfide bonds"
-            },
-            "Insulin (Human)": {
-                "sequence": "MALWMRLLPLLALLALWGPDPAAAFVNQHLCGSHLVEALYLVCGERGFFYTPKTRREAEDLQVGQVELGGGPGAGSLQPLALEGSLQKRGIVEQCCTSICSLYQLENYCN",
-                "description": "Human insulin precursor - important therapeutic protein",
-                "properties": "Hormone, 11.5 kDa (mature), contains disulfide bonds, requires processing"
-            },
-            "Difficult Membrane Protein": {
-                "sequence": "MGSSHHHHHHSSGLVPRGSHMQCVVLVTLLCFAACSAVCEPRCEPRCEPRCNNGCPAFCQCLYNGCPVLGAEESPTIVKGKDMCSPCGKNGPKACEAEKSKCNGGHCPFAKPCKKGCKGRCQYNYPDKKGFGSCPFVENVPYTIKVGSCPFNFNTFANKCRFGYQMGTLCPFEDPHSKPCTDGMTPTMCPEDCESGLRYSTCPFNYQPNDKLEWPRCPTGYRTTDKACPDGMPSQVCPSAQTTTAPAAKQSPAAKQSPAAKQSPAAKQSPAAAK",
-                "description": "Synthetic challenging protein with multiple disulfide bonds and hydrophobic regions",
-                "properties": "Complex protein, multiple cysteines, hydrophobic regions, challenging expression"
-            },
-            "Lysozyme (Hen Egg White)": {
-                "sequence": "MKALIVLGLVLLSVTVQGKVFERCELARTLKRLGMDGYRGISLANWMCLAKWESGYNTRATNYNAGDRSTDYGIFQINSRYWCNDGKTPGAVNACHLSCSALLQDNIADAVACAKRVVRDPQGIRAWVAWRNRCQNRDVRQYVQGCGV",
-                "description": "Hen egg white lysozyme - antimicrobial enzyme",
-                "properties": "Antimicrobial enzyme, 14.3 kDa, contains disulfide bonds, well-studied model protein"
-            }
-        }
-        
-        # Display sample sequences in cards
-        for name, data in sample_sequences.items():
-            with st.expander(f"🧬 {name}", expanded=False):
-                col1, col2 = st.columns([2, 1])
-                
-                with col1:
-                    st.markdown(f"**Description:** {data['description']}")
-                    st.markdown(f"**Properties:** {data['properties']}")
-                    st.markdown(f"**Length:** {len(data['sequence'])} amino acids")
-                    
-                    # Show first 50 characters of sequence
-                    preview = data['sequence'][:50] + "..." if len(data['sequence']) > 50 else data['sequence']
-                    st.code(preview)
-                
-                with col2:
-                    if st.button(f"🔬 Use {name.split()[0]}", key=f"use_{name}", use_container_width=True):
-                        with st.spinner("🧠 Analyzing sequence..."):
-                            st.session_state.protein_sequence = data['sequence']
-                            st.session_state.sequence_analysis = analyze_protein_sequence(data['sequence'])
-                            st.success(f"✅ {name} loaded and analyzed!")
-                            st.rerun()
-    
-    with tab4:
-        st.markdown("### 📊 Analysis Results")
-        
-        if st.session_state.sequence_analysis:
-            analysis = st.session_state.sequence_analysis
-            
-            if 'error' in analysis:
-                st.error(f"❌ {analysis['error']}")
-            else:
-                # Basic properties overview
-                st.markdown("#### 📋 Basic Properties")
-                
-                col1, col2, col3, col4, col5 = st.columns(5)
-                
-                with col1:
-                    st.metric("Length", f"{analysis['sequence_length']} aa")
-                
-                with col2:
-                    st.metric("Molecular Weight", f"{analysis['molecular_weight']} kDa")
-                
-                with col3:
-                    st.metric("Net Charge", f"{analysis['net_charge']:+.2f}")
-                
-                with col4:
-                    stability = "Stable" if analysis['is_stable'] else "Unstable"
-                    delta_color = "normal" if analysis['is_stable'] else "inverse"
-                    st.metric("Stability", stability, delta="Good" if analysis['is_stable'] else "Concern", delta_color=delta_color)
-                
-                with col5:
-                    st.metric("Solubility", analysis['solubility_prediction'])
-                
-                # Detailed composition
-                st.markdown("#### 🧪 Composition Analysis")
-                
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    # Hydrophobicity and charge analysis
-                    st.markdown("**🌊 Physicochemical Properties:**")
-                    
-                    # Create a dataframe for properties
-                    props_data = {
-                        'Property': ['Hydrophobicity', 'Hydrophilicity', 'Polarity', 'Positive Charge', 'Negative Charge'],
-                        'Value': [
-                            f"{analysis['hydrophobicity']:.3f}",
-                            f"{analysis['hydrophilicity']:.3f}",
-                            f"{analysis['polarity']:.3f}",
-                            f"{analysis['positive_charge']:.3f}",
-                            f"{analysis['negative_charge']:.3f}"
-                        ]
-                    }
-                    
-                    props_df = pd.DataFrame(props_data)
-                    st.dataframe(props_df, use_container_width=True, hide_index=True)
-                
-                with col2:
-                    # Special amino acids
-                    st.markdown("**🔤 Special Amino Acids:**")
-                    
-                    special_data = {
-                        'Amino Acid': ['Cysteine (C)', 'Proline (P)', 'Methionine (M)', 'Tryptophan (W)'],
-                        'Count': [
-                            analysis['cysteine_count'],
-                            analysis['proline_count'],
-                            analysis['methionine_count'],
-                            analysis['tryptophan_count']
-                        ]
-                    }
-                    
-                    special_df = pd.DataFrame(special_data)
-                    st.dataframe(special_df, use_container_width=True, hide_index=True)
-                
-                # Visualization of properties
-                st.markdown("#### 📊 Property Visualization")
-                
-                # Create radar chart for protein properties
-                properties = ['Hydrophobicity', 'Hydrophilicity', 'Polarity', 'Stability Score', 'Solubility Score']
-                values = [
-                    analysis['hydrophobicity'],
-                    analysis['hydrophilicity'],
-                    analysis['polarity'],
-                    1.0 if analysis['is_stable'] else 0.0,
-                    analysis['solubility_score']
-                ]
-                
-                fig = go.Figure(data=go.Scatterpolar(
-                    r=values,
-                    theta=properties,
-                    fill='toself',
-                    name='Protein Properties'
-                ))
-                
-                fig.update_layout(
-                    polar=dict(
-                        radialaxis=dict(
-                            visible=True,
-                            range=[0, 1]
-                        )),
-                    showlegend=False,
-                    title="Protein Property Profile",
-                    height=400
-                )
-                
-                st.plotly_chart(fig, use_container_width=True)
-                
-                # Aggregation prone regions
-                if analysis.get('aggregation_prone_regions'):
-                    st.markdown("#### 🚨 Aggregation-Prone Regions")
-                    
-                    regions = analysis['aggregation_prone_regions']
-                    st.warning(f"⚠️ Found {len(regions)} potentially aggregation-prone regions")
-                    
-                    for i, (start, end) in enumerate(regions):
-                        st.markdown(f"- **Region {i+1}:** Positions {start}-{end}")
-                
-                # Issues and recommendations
-                if analysis['issues']:
-                    st.markdown("#### ⚠️ Potential Expression Issues")
-                    
-                    for issue in analysis['issues']:
-                        st.warning(f"⚠️ {issue}")
-                
-                if analysis['recommendations']:
-                    st.markdown("#### 💡 Expression Recommendations")
-                    
-                    for rec in analysis['recommendations']:
-                        st.info(f"💡 {rec}")
-                
-                # Expression recommendations
-                if analysis.get('expression_recommendations'):
-                    st.markdown("#### 🎯 Specific Expression Recommendations")
-                    
-                    for expr_rec in analysis['expression_recommendations']:
-                        st.success(f"🎯 {expr_rec}")
-                
-                # Special properties alerts
-                special_props = []
-                
-                if analysis['has_disulfide_potential']:
-                    special_props.append(f"🔗 **Disulfide Bonds:** {analysis['cysteine_count']} cysteines detected")
-                
-                if analysis['is_hydrophobic']:
-                    special_props.append("💧 **Hydrophobic:** May require special conditions")
-                
-                if analysis['is_membrane_like']:
-                    special_props.append("🧬 **Membrane-like:** Consider specialized hosts")
-                
-                if analysis['is_proline_rich']:
-                    special_props.append("🔄 **Proline-rich:** May require extended folding time")
-                
-                if special_props:
-                    st.markdown("#### 🏷️ Special Properties")
-                    
-                    for prop in special_props:
-                        st.info(prop)
-                
-                # Export options
-                st.markdown("#### 📤 Export Analysis")
-                
-                col1, col2, col3 = st.columns(3)
-                
-                with col1:
-                    # Create analysis report
-                    report = f"""
-Protein Sequence Analysis Report
-Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-
-BASIC PROPERTIES:
-- Length: {analysis['sequence_length']} amino acids
-- Molecular Weight: {analysis['molecular_weight']} kDa
-- Net Charge: {analysis['net_charge']:+.2f}
-- Stability: {'Stable' if analysis['is_stable'] else 'Unstable'}
-- Solubility: {analysis['solubility_prediction']}
-
-PHYSICOCHEMICAL PROPERTIES:
-- Hydrophobicity: {analysis['hydrophobicity']:.3f}
-- Hydrophilicity: {analysis['hydrophilicity']:.3f}
-- Polarity: {analysis['polarity']:.3f}
-
-SPECIAL AMINO ACIDS:
-- Cysteine (C): {analysis['cysteine_count']}
-- Proline (P): {analysis['proline_count']}
-- Methionine (M): {analysis['methionine_count']}
-- Tryptophan (W): {analysis['tryptophan_count']}
-
-ISSUES:
-{chr(10).join(f"- {issue}" for issue in analysis['issues'])}
-
-RECOMMENDATIONS:
-{chr(10).join(f"- {rec}" for rec in analysis['recommendations'])}
-
-EXPRESSION RECOMMENDATIONS:
-{chr(10).join(f"- {expr_rec}" for expr_rec in analysis.get('expression_recommendations', []))}
-                    """
-                    
-                    st.download_button(
-                        label="📄 Download Report",
-                        data=report,
-                        file_name=f"sequence_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
-                        mime="text/plain",
-                        use_container_width=True
-                    )
-                
-                with col2:
-                    # Export sequence with analysis
-                    seq_with_analysis = f">Analyzed_Protein|MW:{analysis['molecular_weight']}kDa|Stability:{'Stable' if analysis['is_stable'] else 'Unstable'}\n{st.session_state.protein_sequence}"
-                    
-                    st.download_button(
-                        label="🧬 Download FASTA",
-                        data=seq_with_analysis,
-                        file_name=f"analyzed_sequence_{datetime.now().strftime('%Y%m%d_%H%M%S')}.fasta",
-                        mime="text/plain",
-                        use_container_width=True
-                    )
-                
-                with col3:
-                    if st.button("➡️ Continue to Parameters", type="primary", use_container_width=True):
-                        st.session_state.page = 'parameters'
-                        st.rerun()
-        
-        else:
-            st.info("📊 No analysis results available. Please analyze a sequence first.")
-            
-            # Quick access to sample sequences
-            st.markdown("**Quick Start:**")
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                if st.button("🧬 Try Rennet Sample", use_container_width=True):
-                    sample_seq = "MEMKFLIFVLTILVLPVFGNLLVYAPFDEEPQQPWQVLSLRYNTKETCEKLVLLDLNQAPLPWHVTVQEDGRCLGGHLEAHQLYCNVTKSEHFRLATHLNDVVLAPTFCQESIENDSKLVLLDVDLPLSHFQLSAAPGTTLEASPNFISHYGIQHLCPNDIYPAGNCSEEGMDLRVTVSSTMDPNQLFTLQISRPWIVIGSDCPLDGLDCEPGYPCDFHPKYGQDGTVPFLVYEAYKSWKQTGVEILQTYCIYPSVVSPHCTSPTSSEPAPQDTVSLTIINHEIPYSQEALVRFENGSKNFRLGEHYLKACGETAYVWHEARKTNRFQVESFKESNTYLMHNLLDKYNCNVGFMPAYGFDQIIEGEEIVLRHSGEFAFSPETPASYTCVNEIFLRPTSNAYLKAQSCWAIPLFNSVPSTLMYMKYCGWSTANPDEIEIGSNSSHYKRTFGQNLDSSDKLNFTDMAGEVISVAITKSQGEKSDHHHHHHHSRSAAGRLEHHHHHH"
-                    
-                    with st.spinner("🧠 Analyzing rennet sequence..."):
-                        st.session_state.protein_sequence = sample_seq
-                        st.session_state.sequence_analysis = analyze_protein_sequence(sample_seq)
-                        st.rerun()
-            
-            with col2:
-                if st.button("🔬 Try GFP Sample", use_container_width=True):
-                    sample_seq = "MVSKGEELFTGVVPILVELDGDVNGHKFSVSGEGEGDATYGKLTLKFICTTGKLPVPWPTLVTTLTYGVQCFSRYPDHMKQHDFFKSAMPEGYVQERTIFFKDDGNYKTRAEVKFEGDTLVNRIELKGIDFKEDGNILGHKLEYNYNSHNVYIMADKQKNGIKVNFKIRHNIEDGSVQLADHYQQNTPIGDGPVLLPDNHYLSTQSALSKDPNEKRDHMVLLEFVTAAGITLGMDELYK"
-                    
-                    with st.spinner("🧠 Analyzing GFP sequence..."):
-                        st.session_state.protein_sequence = sample_seq
-                        st.session_state.sequence_analysis = analyze_protein_sequence(sample_seq)
-                        st.rerun()
-
-def show_parameters_page():
-    """Display comprehensive expression parameters configuration page"""
-    username = st.session_state.username
-    
-    if not username or not check_user_access(username, 'parameters'):
-        show_restricted_feature("Parameters Configuration")
-        return
-    
-    # Enhanced header
-    col1, col2, col3 = st.columns([3, 1, 1])
-    
-    with col1:
-        st.markdown("## ⚙️ Expression Parameters Configuration")
-        st.caption("Fine-tune expression conditions for optimal protein production")
-    
-    with col2:
-        try:
-            st.image(NEOREN_LOGO_URL, width=60)
-        except:
-            pass
-    
-    with col3:
-        if st.button("📚 Parameters Guide", help="Learn about expression parameters"):
-            st.info("Expression parameters guide would open here")
-    
-    # Check prerequisites
-    missing_requirements = []
-    if not st.session_state.selected_vector:
-        missing_requirements.append("Vector")
-    if not st.session_state.selected_host:
-        missing_requirements.append("Host")
-    
-    if missing_requirements:
-        st.warning(f"⚠️ Please select {' and '.join(missing_requirements)} before configuring expression parameters.")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("🧬 Select Vector", use_container_width=True):
-                st.session_state.page = 'vectors'
-                st.rerun()
-        with col2:
-            if st.button("🦠 Select Host", use_container_width=True):
-                st.session_state.page = 'hosts'
-                st.rerun()
-        
-        return
-    
-    # Current selections summary
-    st.markdown("### 🔬 Current Expression System")
-    
-    with st.container():
-        st.markdown(f"""
-        <div style="background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%); 
-                    padding: 20px; 
-                    border-radius: 10px; 
-                    border-left: 5px solid #1976d2;">
-            <h4 style="margin: 0 0 15px 0; color: #1976d2;">🧬 Selected Expression System</h4>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
-                <div>
-                    <strong>🧬 Vector:</strong> {st.session_state.selected_vector.name}<br>
-                    <strong>📏 Size:</strong> {st.session_state.selected_vector.size:,} bp<br>
-                    <strong>🧬 Promoter:</strong> {st.session_state.selected_vector.promoter}<br>
-                    <strong>🏷️ Tags:</strong> {', '.join(st.session_state.selected_vector.tags)}
-                </div>
-                <div>
-                    <strong>🦠 Host:</strong> {st.session_state.selected_host.strain}<br>
-                    <strong>🧬 Species:</strong> {st.session_state.selected_host.species}<br>
-                    <strong>🛡️ Selection:</strong> {st.session_state.selected_vector.selection_marker}<br>
-                    <strong>✅ Features:</strong> {', '.join(st.session_state.selected_host.features[:2])}{'...' if len(st.session_state.selected_host.features) > 2 else ''}
-                </div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    # Show sequence analysis impact if available
-    if st.session_state.sequence_analysis:
-        protein_props = st.session_state.sequence_analysis.get('protein_properties', {})
-        
-        st.markdown("### 🔬 Sequence-Based Recommendations")
-        
-        recommendations = []
-        
-        if protein_props.get('has_disulfide_bonds'):
-            recommendations.append("🔗 Lower temperature (16-25°C) recommended for disulfide bond formation")
-        
-        if protein_props.get('is_membrane_protein'):
-            recommendations.append("💧 Lower temperature and gentle induction for membrane proteins")
-        
-        if protein_props.get('size', 0) > 70:
-            recommendations.append("📏 Extended induction time for large proteins")
-        
-        if protein_props.get('is_toxic'):
-            recommendations.append("⚠️ Higher cell density and lower inducer concentration for toxic proteins")
-        
-        if recommendations:
-            for rec in recommendations:
-                st.info(rec)
-    
-    st.divider()
-    
-    # Parameters configuration
-    st.markdown("### ⚙️ Configure Expression Parameters")
-    
-    # Create tabs for different parameter categories
-    tab1, tab2, tab3, tab4 = st.tabs(["🌡️ Temperature & Time", "🧪 Induction", "🧬 Media & Growth", "🔧 Advanced"])
-    
-    with tab1:
-        st.markdown("#### 🌡️ Temperature and Timing Parameters")
-        
-        col1, col2 = st.columns(2)
-        
-# Continuing from the previous code...
-
-        with col1:
-            st.markdown("**🌡️ Expression Temperature**")
-            
-            temp_presets = {
-                "Low (16°C)": 16,
-                "Mild (25°C)": 25,
-                "Standard (30°C)": 30,
-                "High (37°C)": 37
-            }
-            
-            # Temperature preset selection
-            temp_preset = st.selectbox("Temperature Preset", list(temp_presets.keys()))
-            
-            # Custom temperature slider
-            temperature = st.slider(
-                "Custom Temperature (°C)",
-                min_value=16,
-                max_value=42,
-                value=temp_presets.get(temp_preset, st.session_state.expression_parameters['temperature']),
-                step=1,
-                help="Lower temperatures (16-25°C) improve folding but slow growth. Higher temperatures (30-37°C) increase expression but may cause aggregation."
-            )
-            
-            # Temperature recommendations
-            if temperature <= 20:
-                st.info("❄️ Cold expression: Better folding, slower growth")
-            elif temperature <= 25:
-                st.info("🌡️ Mild expression: Good balance of folding and speed")
-            elif temperature <= 30:
-                st.success("✅ Standard expression: Optimal for most proteins")
-            else:
-                st.warning("🔥 High temperature: Fast growth but risk of aggregation")
-        
-        with col2:
-            st.markdown("**⏱️ Induction Duration**")
-            
-            time_presets = {
-                "Short (2-4h)": 3,
-                "Standard (4-6h)": 5,
-                "Extended (6-8h)": 7,
-                "Overnight (12-16h)": 14
-            }
-            
-            time_preset = st.selectbox("Duration Preset", list(time_presets.keys()))
-            
-            induction_time = st.slider(
-                "Induction Time (hours)",
-                min_value=1,
-                max_value=24,
-                value=time_presets.get(time_preset, st.session_state.expression_parameters['induction_time']),
-                step=1,
-                help="Longer times may increase yield but can stress cells and increase degradation"
-            )
-            
-            # Time recommendations
-            if induction_time <= 4:
-                st.info("⚡ Short induction: Minimal cell stress")
-            elif induction_time <= 8:
-                st.success("✅ Standard induction: Good yield balance")
-            else:
-                st.warning("⏳ Extended induction: Monitor cell viability")
-    
-    with tab2:
-        st.markdown("#### 🧪 Induction Parameters")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("**🧪 Inducer Concentration**")
-            
-            # Get inducer type from vector
-            inducer_type = st.session_state.selected_vector.features.get('induction', 'IPTG')
-            st.info(f"Inducer type: {inducer_type}")
-            
-            conc_presets = {
-                "Very Low (0.1 mM)": 0.1,
-                "Low (0.2 mM)": 0.2,
-                "Standard (0.5 mM)": 0.5,
-                "High (1.0 mM)": 1.0
-            }
-            
-            conc_preset = st.selectbox("Concentration Preset", list(conc_presets.keys()))
-            
-            inducer_concentration = st.slider(
-                f"{inducer_type} Concentration (mM)",
-                min_value=0.05,
-                max_value=2.0,
-                value=conc_presets.get(conc_preset, st.session_state.expression_parameters['inducer_concentration']),
-                step=0.05,
-                help="Lower concentrations reduce cell stress but may give lower expression"
-            )
-            
-            # Concentration recommendations
-            if inducer_concentration <= 0.2:
-                st.info("🟢 Gentle induction: Minimal stress, good for toxic proteins")
-            elif inducer_concentration <= 0.5:
-                st.success("✅ Standard induction: Good balance")
-            else:
-                st.warning("🟡 Strong induction: High expression but increased stress")
-        
-        with col2:
-            st.markdown("**📏 Cell Density at Induction**")
-            
-            od_presets = {
-                "Early log (0.4-0.5)": 0.45,
-                "Mid log (0.6-0.7)": 0.65,
-                "Late log (0.8-1.0)": 0.9
-            }
-            
-            od_preset = st.selectbox("OD600 Preset", list(od_presets.keys()))
-            
-            od600 = st.slider(
-                "OD600 at Induction",
-                min_value=0.3,
-                max_value=1.5,
-                value=od_presets.get(od_preset, st.session_state.expression_parameters['OD600_at_induction']),
-                step=0.05,
-                help="Higher OD600 gives more biomass but cells may be less healthy"
-            )
-            
-            # OD recommendations
-            if od600 <= 0.5:
-                st.info("🌱 Early induction: Healthier cells, lower yield")
-            elif od600 <= 0.8:
-                st.success("✅ Optimal induction: Best balance")
-            else:
-                st.warning("🏭 Late induction: High biomass, potential stress")
-    
-    with tab3:
-        st.markdown("#### 🧬 Media and Growth Conditions")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("**🧬 Growth Medium**")
-            
-            media_options = {
-                "LB (Luria-Bertani)": "LB",
-                "TB (Terrific Broth)": "TB", 
-                "2xYT (2x Yeast Tryptone)": "2xYT",
-                "M9 (Minimal Medium)": "M9",
-                "SOC (Super Optimal Catabolite)": "SOC"
-            }
-            
-            selected_media = st.selectbox(
-                "Medium Type",
-                list(media_options.keys()),
-                index=list(media_options.values()).index(st.session_state.expression_parameters['media_composition']) 
-                if st.session_state.expression_parameters['media_composition'] in media_options.values() else 0
-            )
-            
-            media_composition = media_options[selected_media]
-            
-            # Media descriptions
-            media_info = {
-                "LB": "Standard rich medium - good for routine expression",
-                "TB": "Richest medium - highest cell density and expression",
-                "2xYT": "Rich medium - good balance of growth and expression", 
-                "M9": "Minimal medium - precise control, slower growth",
-                "SOC": "Recovery medium - good for stressed cells"
-            }
-            
-            st.info(f"ℹ️ {media_info[media_composition]}")
-            
-            # Additional medium components
-            st.markdown("**🧪 Additional Components**")
-            
-            glucose = st.checkbox("Add Glucose (0.5%)", help="Reduces leaky expression")
-            glycerol = st.checkbox("Add Glycerol (2%)", help="Alternative carbon source")
-            antibiotics = st.checkbox("Additional Antibiotics", value=True, help="Beyond selection marker")
-        
-        with col2:
-            st.markdown("**🌪️ Shaking and Aeration**")
-            
-            shaking_speed = st.slider(
-                "Shaking Speed (rpm)",
-                min_value=150,
-                max_value=300,
-                value=200,
-                step=25,
-                help="Higher speeds improve aeration but increase stress"
-            )
-            
-            culture_volume = st.slider(
-                "Culture Volume (% of flask)",
-                min_value=10,
-                max_value=50,
-                value=20,
-                step=5,
-                help="Lower volumes improve aeration"
-            )
-            
-            st.markdown("**🌡️ Pre-induction Growth**")
-            
-            preinduction_temp = st.slider(
-                "Pre-induction Temperature (°C)",
-                min_value=30,
-                max_value=42,
-                value=37,
-                step=1,
-                help="Temperature for growth before induction"
-            )
-    
-    with tab4:
-        st.markdown("#### 🔧 Advanced Parameters")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("**🧪 Chemical Additives**")
-            
-            # Additive recommendations based on protein properties
-            if st.session_state.sequence_analysis:
-                protein_props = st.session_state.sequence_analysis.get('protein_properties', {})
-                
-                if protein_props.get('has_disulfide_bonds'):
-                    dtt = st.checkbox("DTT (1-5 mM)", help="Reducing agent for disulfide bonds")
-                    tcep = st.checkbox("TCEP (0.5-2 mM)", help="Alternative reducing agent")
-                else:
-                    dtt = st.checkbox("DTT (1-5 mM)", value=False, help="Reducing agent")
-                    tcep = st.checkbox("TCEP (0.5-2 mM)", value=False, help="Alternative reducing agent")
-                
-                if protein_props.get('is_membrane_protein'):
-                    triton = st.checkbox("Triton X-100 (0.1%)", help="Detergent for membrane proteins")
-                    ddm = st.checkbox("DDM (0.05%)", help="Mild detergent")
-                else:
-                    triton = st.checkbox("Triton X-100 (0.1%)", value=False, help="Detergent")
-                    ddm = st.checkbox("DDM (0.05%)", value=False, help="Mild detergent")
-            else:
-                dtt = st.checkbox("DTT (1-5 mM)", help="Reducing agent")
-                tcep = st.checkbox("TCEP (0.5-2 mM)", help="Alternative reducing agent")
-                triton = st.checkbox("Triton X-100 (0.1%)", help="Detergent")
-                ddm = st.checkbox("DDM (0.05%)", help="Mild detergent")
-            
-            # Universal additives
-            arginine = st.checkbox("L-Arginine (0.4 M)", help="Chemical chaperone")
-            sorbitol = st.checkbox("Sorbitol (1 M)", help="Osmolyte for protein stability")
-        
-        with col2:
-            st.markdown("**🧬 Co-expression Options**")
-            
-            chaperones = st.multiselect(
-                "Chaperone Co-expression",
-                ["GroEL/GroES", "DnaK/DnaJ/GrpE", "Trigger Factor", "None"],
-                default=["None"],
-                help="Co-express chaperones for difficult proteins"
-            )
-            
-            st.markdown("**📊 Monitoring Parameters**")
-            
-            sample_frequency = st.selectbox(
-                "Sampling Frequency",
-                ["Every 30 min", "Every hour", "Every 2 hours", "Pre/post induction only"],
-                index=1
-            )
-            
-            measurements = st.multiselect(
-                "Measurements to Track",
-                ["OD600", "pH", "Viability", "Expression level", "Solubility"],
-                default=["OD600", "Expression level"]
-            )
-    
-    # Parameter summary and validation
-    st.divider()
-    st.markdown("### 📋 Parameter Summary")
-    
-    # Collect all parameters
-    all_parameters = {
-        'temperature': temperature,
-        'induction_time': induction_time,
-        'inducer_concentration': inducer_concentration,
-        'OD600_at_induction': od600,
-        'media_composition': media_composition,
-        'shaking_speed': shaking_speed,
-        'culture_volume': culture_volume,
-        'preinduction_temp': preinduction_temp,
-        'additives': {
-            'glucose': glucose,
-            'glycerol': glycerol,
-            'dtt': dtt,
-            'tcep': tcep,
-            'triton': triton,
-            'ddm': ddm,
-            'arginine': arginine,
-            'sorbitol': sorbitol
-        },
-        'chaperones': chaperones,
-        'monitoring': {
-            'sample_frequency': sample_frequency,
-            'measurements': measurements
-        }
-    }
-    
-    # Display parameter summary
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("**🔬 Core Parameters:**")
-        st.markdown(f"- **Temperature:** {temperature}°C")
-        st.markdown(f"- **Induction Time:** {induction_time} hours")
-        st.markdown(f"- **Inducer:** {inducer_concentration} mM {inducer_type}")
-        st.markdown(f"- **OD600:** {od600}")
-        st.markdown(f"- **Medium:** {media_composition}")
-    
-    with col2:
-        st.markdown("**⚙️ Advanced Settings:**")
-        st.markdown(f"- **Shaking:** {shaking_speed} rpm")
-        st.markdown(f"- **Culture Volume:** {culture_volume}% of flask")
-        st.markdown(f"- **Pre-induction Temp:** {preinduction_temp}°C")
-        
-        active_additives = [k for k, v in all_parameters['additives'].items() if v]
-        if active_additives:
-            st.markdown(f"- **Additives:** {', '.join(active_additives)}")
-        else:
-            st.markdown("- **Additives:** None")
-    
-    # Parameter validation and warnings
-    warnings = []
-    recommendations = []
-    
-    # Temperature vs protein properties
-    if st.session_state.sequence_analysis:
-        protein_props = st.session_state.sequence_analysis.get('protein_properties', {})
-        
-        if protein_props.get('has_disulfide_bonds') and temperature > 30:
-            warnings.append("High temperature may interfere with disulfide bond formation")
-            recommendations.append("Consider reducing temperature to 25°C or lower")
-        
-        if protein_props.get('is_membrane_protein') and temperature > 25:
-            warnings.append("High temperature may cause membrane protein aggregation")
-            recommendations.append("Consider cold expression (16-20°C)")
-        
-        if protein_props.get('size', 0) > 70 and induction_time < 6:
-            warnings.append("Large proteins may need longer induction times")
-            recommendations.append("Consider extending induction to 8-12 hours")
-    
-    # General parameter warnings
-    if temperature >= 37 and inducer_concentration >= 1.0:
-        warnings.append("High temperature + high inducer may cause excessive stress")
-        recommendations.append("Consider reducing either temperature or inducer concentration")
-    
-    if od600 >= 1.0 and induction_time >= 12:
-        warnings.append("High cell density + long induction may deplete nutrients")
-        recommendations.append("Monitor culture health and consider rich medium")
-    
-    # Display warnings and recommendations
-    if warnings:
-        st.markdown("#### ⚠️ Parameter Warnings")
-        for warning in warnings:
-            st.warning(f"⚠️ {warning}")
-    
-    if recommendations:
-        st.markdown("#### 💡 Optimization Suggestions")
-        for rec in recommendations:
-            st.info(f"💡 {rec}")
-    
-    # Auto-suggestion based on sequence analysis
-    st.markdown("### 🤖 AI Parameter Suggestions")
-    
-    if st.session_state.sequence_analysis and 'protein_properties' in st.session_state.sequence_analysis:
-        if st.button("🧠 Generate AI-Optimized Parameters", type="primary", use_container_width=True):
-            protein_properties = st.session_state.sequence_analysis['protein_properties']
-            
-            # Generate optimized parameters
-            optimized_params = st.session_state.expression_parameters.copy()
-            
-            if protein_properties.get('has_disulfide_bonds'):
-                optimized_params['temperature'] = 25
-                st.success("🔗 Temperature lowered to 25°C for disulfide bond formation")
-            
-            if protein_properties.get('is_membrane_protein'):
-                optimized_params['temperature'] = 16
-                optimized_params['inducer_concentration'] = 0.2
-                st.success("💧 Cold expression (16°C) and gentle induction for membrane protein")
-            
-            if protein_properties.get('size', 0) > 70:
-                optimized_params['induction_time'] = 8
-                st.success("📏 Extended induction time for large protein")
-            
-            if protein_properties.get('is_toxic'):
-                optimized_params['OD600_at_induction'] = 0.8
-                optimized_params['inducer_concentration'] = 0.2
-                st.success("⚠️ Late induction with low inducer for toxic protein")
-            
-            # Rich media for better expression
-            optimized_params['media_composition'] = "TB"
-            st.success("🧪 Rich media (TB) recommended for optimal expression")
-            
-            # Update session state
-            st.session_state.expression_parameters = optimized_params
-            
-            st.balloons()
-            st.rerun()
-    else:
-        st.info("💡 Analyze your protein sequence first for AI-powered parameter suggestions")
-        
-        if st.button("🔬 Go to Sequence Analysis", use_container_width=True):
-            st.session_state.page = 'sequence'
-            st.rerun()
-    
-    # Save and continue
-    st.divider()
+    st.markdown("### ⚡ Quick Actions")
     
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        if st.button("💾 Save Parameters", type="secondary", use_container_width=True):
-            # Update session state with current parameters
-            st.session_state.expression_parameters.update({
-                'temperature': temperature,
-                'induction_time': induction_time,
-                'inducer_concentration': inducer_concentration,
-                'OD600_at_induction': od600,
-                'media_composition': media_composition
-            })
-            
-            st.success("✅ Parameters saved successfully!")
+        if st.button("🧬 Start Optimization", use_container_width=True):
+            st.session_state.page = 'vectors'
+            st.rerun()
     
     with col2:
-        if st.button("🔄 Reset to Defaults", use_container_width=True):
-            st.session_state.expression_parameters = {
-                'temperature': 30,
-                'induction_time': 4,
-                'inducer_concentration': 0.5,
-                'OD600_at_induction': 0.6,
-                'media_composition': 'LB'
-            }
+        if st.button("📊 View Results", use_container_width=True):
+            st.session_state.page = 'results'
             st.rerun()
     
     with col3:
-        if st.button("➡️ Proceed to Optimization", type="primary", use_container_width=True):
-            # Save current parameters
-            st.session_state.expression_parameters.update({
-                'temperature': temperature,
-                'induction_time': induction_time,
-                'inducer_concentration': inducer_concentration,
-                'OD600_at_induction': od600,
-                'media_composition': media_composition
-            })
-            
-            st.session_state.page = 'optimize'
-            st.rerun()
+        st.link_button("🛒 Buy NeoRen Product", NEOREN_WEBSITE, use_container_width=True)
 
-def show_optimization_page():
-    """Display comprehensive optimization page"""
-    username = st.session_state.username
-    
-    if not username or not check_user_access(username, 'optimize'):
-        show_restricted_feature("Expression Optimization")
+def show_vectors_page():
+    if not st.session_state.authenticated or not check_user_access(st.session_state.username, 'vectors'):
+        st.error("🔒 This feature requires authentication and proper access level.")
+        if st.button("🔑 Login to Access"):
+            st.session_state.show_login = True
+            st.rerun()
         return
     
-    # Enhanced header
-    col1, col2, col3 = st.columns([3, 1, 1])
+    st.markdown("## 🧬 Vector Selection")
+    vectors = load_vectors()
     
-    with col1:
-        st.markdown("## 🎯 AI-Powered Expression Optimization")
-        st.caption("Generate optimal expression conditions using machine learning")
-    
-    with col2:
-        try:
-            st.image(NEOREN_LOGO_URL, width=60)
-        except:
-            pass
-    
-    with col3:
-        if st.button("📊 View Model Info", help="Learn about the ML model"):
-            st.info("Model information would be displayed here")
-    
-    # Check prerequisites
-    missing_requirements = []
-    if not st.session_state.selected_vector:
-        missing_requirements.append("Vector")
-    if not st.session_state.selected_host:
-        missing_requirements.append("Host")
-    
-    if missing_requirements:
-        st.warning(f"⚠️ Please complete the previous steps: {', '.join(missing_requirements)} selection")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("🧬 Select Vector", use_container_width=True):
-                st.session_state.page = 'vectors'
-                st.rerun()
-        with col2:
-            if st.button("🦠 Select Host", use_container_width=True):
-                st.session_state.page = 'hosts'
-                st.rerun()
-        
+    col1, col2, col3 = st.columns(3)
+    for i, vector in enumerate(vectors):
+        with col1 if i % 3 == 0 else col2 if i % 3 == 1 else col3:
+            with st.container():
+                st.subheader(vector.name)
+                st.write(f"**Size:** {vector.size:,} bp")
+                st.write(f"**Promoter:** {vector.promoter}")
+                st.write(f"**Tags:** {', '.join(vector.tags)}")
+                st.write(vector.description)
+                
+                if st.button(f"Select {vector.name}", key=f"select_vector_{vector.id}"):
+                    st.session_state.selected_vector = vector
+                    st.success(f"Selected {vector.name}")
+                    st.rerun()
+
+def show_hosts_page():
+    if not st.session_state.authenticated or not check_user_access(st.session_state.username, 'hosts'):
+        st.error("🔒 This feature requires authentication and proper access level.")
+        if st.button("🔑 Login to Access"):
+            st.session_state.show_login = True
+            st.rerun()
         return
     
-    # Current system overview
-    st.markdown("### 🔬 Expression System Overview")
+    st.markdown("## 🦠 Host Selection")
+    hosts = load_hosts()
     
-    with st.container():
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.markdown(f"""
-            **🧬 Vector System**
-            - Vector: {st.session_state.selected_vector.name}
-            - Promoter: {st.session_state.selected_vector.promoter}
-            - Tags: {', '.join(st.session_state.selected_vector.tags)}
-            - Expression Level: {st.session_state.selected_vector.features.get('expression_level', 'Medium')}
-            """)
-        
-        with col2:
-            st.markdown(f"""
-            **🦠 Host System**
-            - Strain: {st.session_state.selected_host.strain}
-            - Species: {st.session_state.selected_host.species}
-            - Key Features: {', '.join(st.session_state.selected_host.features[:2])}
-            """)
-        
-        with col3:
-            if st.session_state.sequence_analysis:
-                protein_props = st.session_state.sequence_analysis.get('protein_properties', {})
-                st.markdown(f"""
-                **🔬 Protein Properties**
-                - Size: {protein_props.get('size', 'Unknown')} kDa
-                - Solubility: {st.session_state.sequence_analysis.get('solubility_prediction', 'Unknown')}
-                - Special: {', '.join([k.replace('_', ' ').title() for k, v in protein_props.items() if v and k.startswith('is_') or k.startswith('has_')])}
-                """)
-            else:
-                st.markdown("""
-                **🔬 Protein Properties**
-                - No sequence analyzed
-                - Consider analyzing sequence for better predictions
-                """)
+    col1, col2 = st.columns(2)
+    for i, host in enumerate(hosts):
+        with col1 if i % 2 == 0 else col2:
+            with st.container():
+                st.subheader(host.strain)
+                st.write(f"**Species:** {host.species}")
+                st.write(f"**Features:** {', '.join(host.features[:3])}...")
+                st.write(host.description)
+                
+                if st.button(f"Select {host.strain}", key=f"select_host_{host.id}"):
+                    st.session_state.selected_host = host
+                    st.success(f"Selected {host.strain}")
+                    st.rerun()
+
+def show_sequence_page():
+    if not st.session_state.authenticated or not check_user_access(st.session_state.username, 'sequence'):
+        st.error("🔒 This feature requires authentication and proper access level.")
+        if st.button("🔑 Login to Access"):
+            st.session_state.show_login = True
+            st.rerun()
+        return
     
-    # Current parameters display
-    st.markdown("### ⚙️ Current Parameters")
+    st.markdown("## 🔬 Sequence Analysis")
     
-    params_df = pd.DataFrame([
-        ["🌡️ Temperature", f"{st.session_state.expression_parameters['temperature']} °C"],
-        ["⏱️ Induction Time", f"{st.session_state.expression_parameters['induction_time']} hours"],
-        ["🧪 Inducer Concentration", f"{st.session_state.expression_parameters['inducer_concentration']} mM"],
-        ["📏 OD600 at Induction", str(st.session_state.expression_parameters['OD600_at_induction'])],
-        ["🧬 Media", st.session_state.expression_parameters['media_composition']]
-    ], columns=["Parameter", "Value"])
+    sequence = st.text_area("Enter protein sequence:", height=200, 
+                           placeholder="Enter your protein sequence using single letter amino acid codes...")
     
-    st.dataframe(params_df, use_container_width=True, hide_index=True)
+    if st.button("🔬 Analyze Sequence", type="primary"):
+        if sequence:
+            with st.spinner("Analyzing sequence..."):
+                analysis = analyze_protein_sequence(sequence)
+                st.session_state.sequence_analysis = analysis
+                
+                if 'error' in analysis:
+                    st.error(analysis['error'])
+                else:
+                    st.success("Analysis complete!")
+                    
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Length", f"{analysis['sequence_length']} aa")
+                    with col2:
+                        st.metric("Molecular Weight", f"{analysis['molecular_weight']} kDa")
+                    with col3:
+                        stability = "Stable" if analysis['is_stable'] else "Unstable"
+                        st.metric("Stability", stability)
+                    
+                    if analysis['issues']:
+                        st.warning("⚠️ Potential Issues:")
+                        for issue in analysis['issues']:
+                            st.write(f"• {issue}")
+                    
+                    if analysis['recommendations']:
+                        st.info("💡 Recommendations:")
+                        for rec in analysis['recommendations']:
+                            st.write(f"• {rec}")
+
+def show_parameters_page():
+    if not st.session_state.authenticated or not check_user_access(st.session_state.username, 'parameters'):
+        st.error("🔒 This feature requires authentication and proper access level.")
+        if st.button("🔑 Login to Access"):
+            st.session_state.show_login = True
+            st.rerun()
+        return
     
-    # Optimization settings
-    st.markdown("### 🎯 Optimization Settings")
+    st.markdown("## ⚙️ Expression Parameters")
     
     col1, col2 = st.columns(2)
     
     with col1:
-        st.markdown("**🔧 Optimization Parameters**")
-        
-        n_suggestions = st.slider(
-            "Number of Optimization Suggestions",
-            min_value=1,
-            max_value=10,
-            value=5,
-            help="How many optimized parameter sets to generate"
-        )
-        
-        optimization_goal = st.selectbox(
-            "Optimization Goal",
-            ["Maximum Expression", "Balanced Expression/Solubility", "Minimize Inclusion Bodies", "Cost Optimization"],
-            help="What aspect to optimize for"
-        )
-        
-        include_risky = st.checkbox(
-            "Include High-Risk, High-Reward Options",
-            value=False,
-            help="Include aggressive parameters that might give very high expression but with higher failure risk"
-        )
+        temperature = st.slider("Temperature (°C)", 16, 42, 30)
+        induction_time = st.slider("Induction Time (hours)", 1, 24, 4)
     
     with col2:
-        st.markdown("**🧬 Protein-Specific Settings**")
-        
-        if st.session_state.sequence_analysis:
-            protein_props = st.session_state.sequence_analysis.get('protein_properties', {})
-            
-            is_membrane = st.checkbox(
-                "Membrane Protein",
-                value=protein_props.get('is_membrane_protein', False),
-                help="Special considerations for membrane proteins"
-            )
-            
-            has_disulfide = st.checkbox(
-                "Contains Disulfide Bonds",
-                value=protein_props.get('has_disulfide_bonds', False),
-                help="Optimize for disulfide bond formation"
-            )
-            
-            is_toxic = st.checkbox(
-                "Potentially Toxic to Host",
-                value=protein_props.get('is_toxic', False),
-                help="Use gentle conditions to minimize toxicity"
-            )
-            
-            is_large = st.checkbox(
-                "Large Protein (>70 kDa)",
-                value=protein_props.get('size', 0) > 70,
-                help="Extended folding time may be needed"
-            )
-        else:
-            st.info("💡 Analyze your sequence for automatic detection")
-            
-            is_membrane = st.checkbox("Membrane Protein", value=False)
-            has_disulfide = st.checkbox("Contains Disulfide Bonds", value=False)
-            is_toxic = st.checkbox("Potentially Toxic to Host", value=False)
-            is_large = st.checkbox("Large Protein (>70 kDa)", value=False)
+        inducer_conc = st.slider("Inducer Concentration (mM)", 0.1, 2.0, 0.5)
+        od600 = st.slider("OD600 at Induction", 0.3, 1.5, 0.6)
     
-    # Optimization execution
-    st.markdown("### 🚀 Run Optimization")
+    media = st.selectbox("Media", ["LB", "TB", "2xYT", "M9", "SOC"])
     
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        if st.button("🧠 Generate AI Optimizations", type="primary", use_container_width=True):
-            
-            # Create protein properties for optimization
-            protein_properties = {
-                'size': st.session_state.sequence_analysis.get('molecular_weight', 300) if st.session_state.sequence_analysis else 300,
-                'has_disulfide_bonds': has_disulfide,
-                'is_membrane_protein': is_membrane,
-                'is_toxic': is_toxic,
-                'is_large': is_large
-            }
-            
-            with st.spinner("🧠 AI is analyzing thousands of parameter combinations... This may take a moment."):
-                # Initialize optimizer
-                optimizer = ExpressionOptimizer()
-                optimizer.load_model()
-                
-                # Current conditions prediction
-                current_conditions = {
-                    'vector_type': st.session_state.selected_vector.name,
-                    'host_strain': st.session_state.selected_host.strain,
-                    'temperature': st.session_state.expression_parameters['temperature'],
-                    'induction_time': st.session_state.expression_parameters['induction_time'],
-                    'inducer_concentration': st.session_state.expression_parameters['inducer_concentration'],
-                    'OD600_at_induction': st.session_state.expression_parameters['OD600_at_induction'],
-                    'media_composition': st.session_state.expression_parameters['media_composition']
-                }
-                
-                # Predict current expression
-                current_result = optimizer.predict_expression(current_conditions)
-                current_expression = current_result['prediction']
-                current_confidence = current_result['confidence']
-                
-                # Generate optimization suggestions
-                suggestions = optimizer.suggest_optimal_conditions(
-                    vector_name=st.session_state.selected_vector.name,
-                    host_strain=st.session_state.selected_host.strain,
-                    protein_properties=protein_properties,
-                    n_suggestions=n_suggestions
-                )
-                
-                # Store optimization results
-                st.session_state.optimization_results = {
-                    'current_conditions': current_conditions,
-                    'current_expression': current_expression,
-                    'current_confidence': current_confidence,
-                    'suggestions': suggestions,
-                    'optimization_goal': optimization_goal,
-                    'protein_properties': protein_properties,
-                    'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    'vector': st.session_state.selected_vector.to_dict(),
-                    'host': st.session_state.selected_host.to_dict(),
-                    'sequence_analysis': st.session_state.sequence_analysis
-                }
-                
-                st.success("✅ Optimization complete! Generated optimized parameter sets.")
-                st.balloons()
-                
-                # Automatically go to results page
-                st.session_state.page = 'results'
-                st.rerun()
-    
-    with col2:
-        st.markdown("**⚡ Quick Actions**")
-        
-        if st.button("📊 View Previous Results", use_container_width=True):
-            if st.session_state.optimization_results:
-                st.session_state.page = 'results'
-                st.rerun()
-            else:
-                st.warning("No previous results available")
-        
-        if st.button("🔄 Reset Parameters", use_container_width=True):
-            st.session_state.page = 'parameters'
-            st.rerun()
-        
-        if st.button("🔬 Analyze Sequence", use_container_width=True):
-            st.session_state.page = 'sequence'
-            st.rerun()
-    
-    # Model information
-    with st.expander("🔬 About the AI Model", expanded=False):
-        st.markdown("""
-        ### 🧠 Machine Learning Model Details
-        
-        Our AI optimization engine uses a **Random Forest Regressor** trained on:
-        - **200+ experimental data points** from literature and in-house experiments
-        - **7 expression vectors** and **7 host strains**
-        - **5 media types** and **4 temperature ranges**
-        - **Multiple protein types** including membrane proteins, difficult-to-express proteins, and standard soluble proteins
-        
-        **Model Performance:**
-        - **94% accuracy** on validation dataset
-        - **R² score: 0.91** for expression level prediction
-        - **Mean Absolute Error: 5.2%** expression level
-        
-        **Features Considered:**
-        - Vector type and promoter strength
-        - Host strain capabilities
-        - Expression temperature and timing
-        - Inducer concentration and cell density
-        - Media composition and additives
-        - Protein properties (size, hydrophobicity, special features)
-        
-        **Confidence Scoring:**
-        - Each prediction includes a confidence score (0-100%)
-        - Higher confidence = more reliable prediction
-        - Confidence based on training data similarity and model consensus
-        """)
+    if st.button("💾 Save Parameters", type="primary"):
+        st.session_state.expression_parameters = {
+            'temperature': temperature,
+            'induction_time': induction_time,
+            'inducer_concentration': inducer_conc,
+            'OD600_at_induction': od600,
+            'media_composition': media
+        }
+        st.success("Parameters saved!")
 
-def show_results_page():
-    """Display comprehensive optimization results page"""
-    username = st.session_state.username
-    
-    if not username or not check_user_access(username, 'results'):
-        show_restricted_feature("Results Visualization")
+def show_optimization_page():
+    if not st.session_state.authenticated or not check_user_access(st.session_state.username, 'optimize'):
+        st.error("🔒 This feature requires authentication and proper access level.")
+        if st.button("🔑 Login to Access"):
+            st.session_state.show_login = True
+            st.rerun()
         return
     
-    # Enhanced header
-    col1, col2, col3 = st.columns([3, 1, 1])
+    st.markdown("## 🎯 AI Optimization")
     
-    with col1:
-        st.markdown("## 📊 Optimization Results & Analysis")
-        st.caption("AI-generated recommendations for optimal protein expression")
+    if not st.session_state.selected_vector or not st.session_state.selected_host:
+        st.warning("Please select a vector and host first.")
+        return
     
-    with col2:
-        try:
-            st.image(NEOREN_LOGO_URL, width=60)
-        except:
-            pass
+    st.info(f"Optimizing: {st.session_state.selected_vector.name} + {st.session_state.selected_host.strain}")
     
-    with col3:
-        if st.button("📄 Export Report", help="Download comprehensive report"):
-            st.info("Export functionality would be implemented here")
+    if st.button("🧠 Run AI Optimization", type="primary"):
+        with st.spinner("AI is analyzing thousands of parameter combinations... This may take a moment."):
+            # Initialize optimizer
+            optimizer = ExpressionOptimizer()
+            optimizer.load_model()
+            
+            # Current conditions
+            current_conditions = {
+                'vector_type': st.session_state.selected_vector.name,
+                'host_strain': st.session_state.selected_host.strain,
+                'temperature': st.session_state.expression_parameters['temperature'],
+                'induction_time': st.session_state.expression_parameters['induction_time'],
+                'inducer_concentration': st.session_state.expression_parameters['inducer_concentration'],
+                'OD600_at_induction': st.session_state.expression_parameters['OD600_at_induction'],
+                'media_composition': st.session_state.expression_parameters['media_composition']
+            }
+            
+            # Predict current expression
+            current_result = optimizer.predict_expression(current_conditions)
+            current_expression = current_result['prediction']
+            current_confidence = current_result['confidence']
+            
+            # Generate optimization suggestions
+            protein_properties = st.session_state.sequence_analysis.get('protein_properties', {}) if st.session_state.sequence_analysis else {}
+            
+            suggestions = optimizer.suggest_optimal_conditions(
+                vector_name=st.session_state.selected_vector.name,
+                host_strain=st.session_state.selected_host.strain,
+                protein_properties=protein_properties,
+                n_suggestions=5
+            )
+            
+            # Store optimization results
+            st.session_state.optimization_results = {
+                'current_conditions': current_conditions,
+                'current_expression': current_expression,
+                'current_confidence': current_confidence,
+                'suggestions': suggestions,
+                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'vector': st.session_state.selected_vector.to_dict(),
+                'host': st.session_state.selected_host.to_dict(),
+                'sequence_analysis': st.session_state.sequence_analysis
+            }
+            
+            st.success("✅ Optimization complete! Generated optimized parameter sets.")
+            st.balloons()
+            
+            # Automatically go to results page
+            st.session_state.page = 'results'
+            st.rerun()
+
+def show_results_page():
+    if not st.session_state.authenticated or not check_user_access(st.session_state.username, 'results'):
+        st.error("🔒 This feature requires authentication and proper access level.")
+        if st.button("🔑 Login to Access"):
+            st.session_state.show_login = True
+            st.rerun()
+        return
     
-    # Check if results exist
+    st.markdown("## 📊 Optimization Results")
+    
     if not st.session_state.optimization_results:
         st.warning("⚠️ No optimization results available. Please run optimization first.")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            if st.button("🎯 Run Optimization", type="primary", use_container_width=True):
-                st.session_state.page = 'optimize'
-                st.rerun()
-        
-        with col2:
-            if st.button("🧬 Start from Vector Selection", use_container_width=True):
-                st.session_state.page = 'vectors'
-                st.rerun()
-        
+        if st.button("🎯 Run Optimization", type="primary"):
+            st.session_state.page = 'optimize'
+            st.rerun()
         return
     
     results = st.session_state.optimization_results
     
-    # Results header with timestamp
+    # Results header
     st.info(f"🕒 **Optimization completed:** {results['timestamp']}")
     
     # Executive Summary
@@ -4359,50 +1776,27 @@ def show_results_page():
     
     if best_suggestion:
         best_expr = best_suggestion['predicted_expression']
-        best_conf = best_suggestion['confidence']
         improvement = best_expr - current_expr
         improvement_percent = (improvement / current_expr) * 100 if current_expr > 0 else 0
         
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
-            st.metric(
-                "🔬 Current Setup",
-                f"{current_expr:.1f}%",
-                delta=f"Confidence: {current_conf:.1f}%",
-                help="Predicted expression with your current parameters"
-            )
+            st.metric("🔬 Current Setup", f"{current_expr:.1f}%", delta=f"Confidence: {current_conf:.1f}%")
         
         with col2:
-            st.metric(
-                "🎯 Optimized Setup",
-                f"{best_expr:.1f}%",
-                delta=f"+{improvement:.1f}%",
-                delta_color="normal" if improvement > 0 else "inverse",
-                help="Best predicted expression from optimization"
-            )
+            st.metric("🎯 Best Option", f"{best_expr:.1f}%", delta=f"+{improvement:.1f}%", delta_color="normal")
         
         with col3:
-            st.metric(
-                "📈 Improvement",
-                f"{improvement_percent:+.1f}%",
-                delta="vs current setup",
-                delta_color="normal" if improvement_percent > 0 else "inverse",
-                help="Percentage improvement over current parameters"
-            )
+            st.metric("📈 Improvement", f"{improvement_percent:+.1f}%", delta="vs current")
         
         with col4:
             avg_confidence = np.mean([s['confidence'] for s in results['suggestions']])
-            st.metric(
-                "🎯 Avg Confidence",
-                f"{avg_confidence:.1f}%",
-                help="Average confidence across all suggestions"
-            )
+            st.metric("🎯 Avg Confidence", f"{avg_confidence:.1f}%")
     
-    # Visualization of results
+    # Visualization
     st.markdown("### 📊 Expression Level Comparison")
     
-    # Prepare data for visualization
     labels = ['Current Setup'] + [f'Option {i+1}' for i in range(len(results['suggestions']))]
     expressions = [results['current_expression']] + [s['predicted_expression'] for s in results['suggestions']]
     confidences = [results['current_confidence']] + [s['confidence'] for s in results['suggestions']]
@@ -4410,45 +1804,20 @@ def show_results_page():
     # Create comparison chart
     fig = go.Figure()
     
-    # Add expression bars
     fig.add_trace(go.Bar(
         x=labels,
         y=expressions,
         name='Predicted Expression (%)',
         marker_color=['#1976d2'] + ['#4caf50'] * len(results['suggestions']),
         text=[f"{e:.1f}%" for e in expressions],
-        textposition='auto',
-        yaxis='y1'
+        textposition='auto'
     ))
     
-    # Add confidence line
-    fig.add_trace(go.Scatter(
-        x=labels,
-        y=confidences,
-        mode='lines+markers',
-        name='Confidence (%)',
-        line=dict(color='#ff9800', width=3),
-        marker=dict(size=8),
-        yaxis='y2'
-    ))
-    
-    # Update layout for dual y-axis
     fig.update_layout(
-        title="Expression Predictions with Confidence Scores",
+        title="Expression Predictions Comparison",
         xaxis_title="Parameter Sets",
-        yaxis=dict(
-            title="Predicted Expression (%)",
-            side="left",
-            range=[0, max(expressions) * 1.1]
-        ),
-        yaxis2=dict(
-            title="Confidence (%)",
-            side="right",
-            overlaying="y",
-            range=[0, 100]
-        ),
-        height=500,
-        showlegend=True
+        yaxis_title="Predicted Expression (%)",
+        height=400
     )
     
     st.plotly_chart(fig, use_container_width=True)
@@ -4456,127 +1825,48 @@ def show_results_page():
     # Detailed suggestions
     st.markdown("### 💡 Optimization Suggestions")
     
-    # Create tabs for each suggestion
-    if results['suggestions']:
-        tab_labels = [f"🥇 Best Option" if i == 0 else f"Option {i+1}" for i in range(len(results['suggestions']))]
-        suggestion_tabs = st.tabs(tab_labels)
-        
-        for i, (tab, suggestion) in enumerate(zip(suggestion_tabs, results['suggestions'])):
-            with tab:
-                params = suggestion['parameters']
-                predicted_expr = suggestion['predicted_expression']
-                confidence = suggestion['confidence']
+    for i, suggestion in enumerate(results['suggestions']):
+        with st.expander(f"{'🥇 Best Option' if i == 0 else f'Option {i+1}'} - {suggestion['predicted_expression']:.1f}% Expression", expanded=i==0):
+            params = suggestion['parameters']
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("**🧪 Optimized Parameters:**")
+                st.write(f"- **Temperature:** {params['temperature']}°C")
+                st.write(f"- **Induction Time:** {params['induction_time']} hours")
+                st.write(f"- **Inducer Concentration:** {params['inducer_concentration']} mM")
+                st.write(f"- **OD600:** {params['OD600_at_induction']}")
+                st.write(f"- **Media:** {params['media_composition']}")
+            
+            with col2:
+                st.markdown("**📊 Performance Metrics:**")
+                st.write(f"- **Expression Level:** {suggestion['predicted_expression']:.1f}%")
+                st.write(f"- **Confidence:** {suggestion['confidence']:.1f}%")
+                improvement = suggestion['predicted_expression'] - current_expr
+                st.write(f"- **Improvement:** {improvement:+.1f}%")
                 
-                # Suggestion header
-                col1, col2, col3 = st.columns([2, 1, 1])
-                
-                with col1:
-                    if i == 0:
-                        st.markdown("#### 🏆 Recommended Best Option")
-                    else:
-                        st.markdown(f"#### 🔬 Alternative Option {i+1}")
-                
-                with col2:
-                    st.metric("Expression", f"{predicted_expr:.1f}%")
-                
-                with col3:
-                    st.metric("Confidence", f"{confidence:.1f}%")
-                
-                # Parameter comparison
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.markdown("**🧪 Optimized Parameters:**")
-                    
-                    param_changes = []
-                    current_params = results['current_conditions']
-                    
-                    for param, value in params.items():
-                        if param in current_params:
-                            current_val = current_params[param]
-                            if value != current_val:
-                                if isinstance(value, (int, float)):
-                                    change = f"{param}: {current_val} → **{value}**"
-                                else:
-                                    change = f"{param}: {current_val} → **{value}**"
-                                param_changes.append(change)
-                            else:
-                                param_changes.append(f"{param}: {value} (unchanged)")
-                        else:
-                            param_changes.append(f"{param}: **{value}**")
-                    
-                    for change in param_changes:
-                        if "→" in change and "unchanged" not in change:
-                            st.markdown(f"- 🔄 {change}")
-                        else:
-                            st.markdown(f"- ✅ {change}")
-                
-                with col2:
-                    st.markdown("**📊 Performance Metrics:**")
-                    
-                    improvement = predicted_expr - current_expr
-                    improvement_pct = (improvement / current_expr * 100) if current_expr > 0 else 0
-                    
-                    st.markdown(f"- **Expression Level:** {predicted_expr:.1f}%")
-                    st.markdown(f"- **Improvement:** {improvement:+.1f}% ({improvement_pct:+.1f}%)")
-                    st.markdown(f"- **Confidence:** {confidence:.1f}%")
-                    st.markdown(f"- **Risk Level:** {'Low' if confidence > 80 else 'Medium' if confidence > 60 else 'High'}")
-                
-                # Protocol notes
-                if 'protocol_notes' in suggestion and suggestion['protocol_notes']:
-                    st.markdown("**📋 Protocol Notes:**")
-                    for note in suggestion['protocol_notes']:
-                        st.info(f"📝 {note}")
-                
-                # Additives and special considerations
-                if 'additives' in suggestion and suggestion['additives']:
-                    st.markdown("**🧪 Recommended Additives:**")
-                    for additive in suggestion['additives']:
-                        st.success(f"➕ {additive}")
-    
-    # System compatibility analysis
-    st.markdown("### 🔗 System Compatibility Analysis")
-    
-    compatibility_data = []
-    
-    # Vector-Host compatibility
-    vector_features = set(results['vector']['features'].get('induction', 'IPTG').lower().split())
-    host_features = set([f.lower() for f in results['host']['features']])
-    
-    if 't7' in vector_features and 't7 expression' in [f.lower() for f in results['host']['features']]:
-        compatibility_data.append(["Vector-Host", "✅ Compatible", "T7 system compatibility confirmed"])
-    else:
-        compatibility_data.append(["Vector-Host", "⚠️ Check needed", "Verify promoter-host compatibility"])
-    
-    # Protein-specific compatibility
-    if results.get('sequence_analysis'):
-        protein_props = results['sequence_analysis'].get('protein_properties', {})
-        
-        if protein_props.get('has_disulfide_bonds'):
-            if 'shuffle' in results['host']['strain'].lower() or 'origami' in results['host']['strain'].lower():
-                compatibility_data.append(["Disulfide Bonds", "✅ Optimal", "Specialized strain for disulfide formation"])
-            else:
-                compatibility_data.append(["Disulfide Bonds", "⚠️ Suboptimal", "Consider SHuffle or Origami strains"])
-        
-        if protein_props.get('is_membrane_protein'):
-            if 'c41' in results['host']['strain'].lower() or 'c43' in results['host']['strain'].lower():
-                compatibility_data.append(["Membrane Protein", "✅ Optimal", "Membrane protein specialized strain"])
-            else:
-                compatibility_data.append(["Membrane Protein", "⚠️ Suboptimal", "Consider C41(DE3) or C43(DE3)"])
-    
-    # Selection marker compatibility
-    compatibility_data.append(["Selection", "✅ Compatible", f"{results['vector']['selection_marker']} resistance"])
-    
-    compatibility_df = pd.DataFrame(compatibility_data, columns=["Aspect", "Status", "Notes"])
-    st.dataframe(compatibility_df, use_container_width=True, hide_index=True)
+                # Risk assessment
+                if suggestion['confidence'] > 80:
+                    risk = "🟢 Low Risk"
+                elif suggestion['confidence'] > 60:
+                    risk = "🟡 Medium Risk"
+                else:
+                    risk = "🔴 High Risk"
+                st.write(f"- **Risk Level:** {risk}")
+            
+            # Additives
+            if suggestion.get('additives'):
+                st.markdown("**🧪 Recommended Additives:**")
+                for additive in suggestion['additives']:
+                    st.success(f"➕ {additive}")
     
     # Protocol generation
-    st.markdown("### 📋 Complete Expression Protocol")
+    st.markdown("### 📋 Complete Protocol")
     
     if best_suggestion:
         best_params = best_suggestion['parameters']
         
-        # Generate comprehensive protocol
         protocol = f"""
 # Optimized Expression Protocol
 Generated by RennetOptiMax Pro on {results['timestamp']}
@@ -4586,189 +1876,93 @@ Generated by RennetOptiMax Pro on {results['timestamp']}
 - **Host:** {results['host']['strain']} ({results['host']['species']})
 - **Promoter:** {results['vector']['promoter']}
 - **Selection:** {results['vector']['selection_marker']}
-- **Tags:** {', '.join(results['vector']['tags'])}
+
+## Optimized Parameters
+- **Temperature:** {best_params['temperature']}°C
+- **Induction Time:** {best_params['induction_time']} hours
+- **Inducer Concentration:** {best_params['inducer_concentration']} mM
+- **OD600 at Induction:** {best_params['OD600_at_induction']}
+- **Media:** {best_params['media_composition']}
 
 ## Predicted Performance
-- **Expression Level:** {best_params.get('predicted_expression', best_suggestion['predicted_expression']):.1f}%
+- **Expression Level:** {best_suggestion['predicted_expression']:.1f}%
 - **Confidence:** {best_suggestion['confidence']:.1f}%
-- **Improvement:** {(best_suggestion['predicted_expression'] - current_expr):+.1f}% vs current setup
+- **Improvement:** {(best_suggestion['predicted_expression'] - current_expr):+.1f}% vs current
 
-## Materials Required
+## Protocol Steps
+1. Transform competent {results['host']['strain']} cells with {results['vector']['name']}
+2. Grow starter culture in {best_params['media_composition']} + {results['vector']['selection_marker']}
+3. Inoculate expression culture (1:100 dilution)
+4. Grow at 37°C until OD600 = {best_params['OD600_at_induction']}
+5. Add inducer to {best_params['inducer_concentration']} mM final concentration
+6. Reduce temperature to {best_params['temperature']}°C
+7. Express for {best_params['induction_time']} hours
+8. Harvest cells and proceed with purification
 
-### Bacterial Strains
-- {results['host']['strain']} competent cells
-- Store at -80°C until use
-
-### Plasmids
-- {results['vector']['name']} vector containing your gene of interest
-- Verify insert by sequencing before expression
-
-### Media and Reagents
-- {best_params['media_composition']} medium (autoclaved)
-- {results['vector']['selection_marker']} antibiotic stock solution
-- {"IPTG" if results['vector']['features'].get('induction', 'IPTG') == 'IPTG' else results['vector']['features'].get('induction', 'IPTG')} (inducer)
-- Sterile culture flasks (250 mL recommended for 50 mL culture)
-
-### Equipment
-- Incubator with shaking capability
-- Spectrophotometer for OD600 measurement
-- Centrifuge for cell harvesting
-- -80°C freezer for storage
-
-## Detailed Protocol
-
-### Day 1: Transformation
-1. **Transform competent cells**
-   - Thaw {results['host']['strain']} competent cells on ice
-   - Add 1-5 ng plasmid DNA to 50 μL competent cells
-   - Incubate on ice for 30 minutes
-   - Heat shock at 42°C for 45 seconds
-   - Return to ice for 2 minutes
-   - Add 250 μL SOC medium
-   - Recover at 37°C for 1 hour with shaking
-
-2. **Plate and select**
-   - Plate on LB agar + {results['vector']['selection_marker']} 
-   - Incubate overnight at 37°C
-
-### Day 2: Starter Culture
-1. **Inoculate starter culture**
-   - Pick single colony from transformation plate
-   - Inoculate 5 mL {best_params['media_composition']} + {results['vector']['selection_marker']}
-   - Incubate overnight at 37°C with shaking (200 rpm)
-
-### Day 3: Expression Culture
-1. **Prepare expression culture**
-   - Dilute starter culture 1:100 into fresh {best_params['media_composition']} + {results['vector']['selection_marker']}
-   - Use 50 mL medium in 250 mL flask for optimal aeration
-   - Incubate at 37°C with shaking (200 rpm)
-
-2. **Monitor growth**
-   - Measure OD600 every hour starting from OD600 ~0.2
-   - Culture typically reaches OD600 0.6 in 2-3 hours
-
-3. **Induction**
-   - When OD600 reaches {best_params['OD600_at_induction']:.1f}:
-     * Add {"IPTG" if results['vector']['features'].get('induction', 'IPTG') == 'IPTG' else results['vector']['features'].get('induction', 'IPTG')} to final concentration {best_params['inducer_concentration']} mM
-     * Reduce temperature to {best_params['temperature']}°C
-     * Continue shaking at 200 rpm
-     * Incubate for {best_params['induction_time']} hours
-
-4. **Harvest cells**
-   - Centrifuge culture at 4,000g for 15 minutes at 4°C
-   - Discard supernatant
-   - Cell pellet can be stored at -20°C or processed immediately
-
-### Cell Lysis and Purification
-1. **Cell lysis**
-   - Resuspend pellet in lysis buffer appropriate for your purification method
-   - For His-tag: 50 mM Tris-HCl pH 7.5, 300 mM NaCl, 10 mM imidazole
-   - Add protease inhibitors if needed
-   - Lyse by sonication (10 x 30 sec pulses with 30 sec rest)
-   - Centrifuge at 15,000g for 30 minutes at 4°C
-
-2. **Purification**
-   - Proceed with purification appropriate for your tag system
-   - His-tag: Ni-NTA affinity chromatography
-   - GST-tag: Glutathione affinity chromatography
-   - MBP-tag: Amylose affinity chromatography
-
-## Quality Control
-- Check expression by SDS-PAGE before and after induction
-- Verify protein identity by Western blot or mass spectrometry
-- Assess solubility by comparing total vs soluble fractions
-- Monitor expression level throughout induction period
-
-## Troubleshooting
-- **Low expression:** Increase induction time, verify plasmid integrity
-- **Inclusion bodies:** Lower temperature, reduce inducer concentration
-- **No expression:** Check antibiotic concentration, verify strain compatibility
-- **Slow growth:** Check medium freshness, verify temperature
-
-## Storage and Handling
-- Store competent cells at -80°C
-- Store plasmid at -20°C in small aliquots
-- Store purified protein according to its specific requirements
-- Keep antibiotics and IPTG stocks at -20°C
-
-## Safety Notes
-- Use appropriate antibiotic safety measures
-- Handle bacterial cultures according to institutional guidelines
-- Dispose of bacterial waste properly
-- Wear appropriate PPE throughout the procedure
-
----
 Generated by RennetOptiMax Pro - AI-Powered Protein Expression Optimization
 © 2025 NeoRen - Engineered for Excellence
         """
         
-        # Display protocol in expandable section
-        with st.expander("📋 Complete Protocol (Click to expand)", expanded=True):
+        with st.expander("📋 Complete Protocol (Click to expand)"):
             st.code(protocol, language="markdown")
         
-        # Protocol download
+        # Download options
         col1, col2, col3 = st.columns(3)
         
         with col1:
             st.download_button(
-                label="📄 Download Protocol (TXT)",
+                label="📄 Download Protocol",
                 data=protocol,
-                file_name=f"expression_protocol_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+                file_name=f"protocol_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
                 mime="text/plain",
                 use_container_width=True
             )
         
         with col2:
-            # Create CSV of parameters
-            csv_data = []
-            csv_data.append(["Parameter", "Value", "Unit"])
-            csv_data.append(["Temperature", best_params['temperature'], "°C"])
-            csv_data.append(["Induction Time", best_params['induction_time'], "hours"])
-            csv_data.append(["Inducer Concentration", best_params['inducer_concentration'], "mM"])
-            csv_data.append(["OD600 at Induction", best_params['OD600_at_induction'], ""])
-            csv_data.append(["Media", best_params['media_composition'], ""])
-            csv_data.append(["Predicted Expression", f"{best_suggestion['predicted_expression']:.1f}", "%"])
-            csv_data.append(["Confidence", f"{best_suggestion['confidence']:.1f}", "%"])
-            
-            csv_string = "\n".join([",".join(row) for row in csv_data])
+            # Create CSV data
+            csv_data = "Parameter,Value,Unit\n"
+            csv_data += f"Temperature,{best_params['temperature']},°C\n"
+            csv_data += f"Induction Time,{best_params['induction_time']},hours\n"
+            csv_data += f"Inducer Concentration,{best_params['inducer_concentration']},mM\n"
+            csv_data += f"OD600,{best_params['OD600_at_induction']},\n"
+            csv_data += f"Media,{best_params['media_composition']},\n"
+            csv_data += f"Predicted Expression,{best_suggestion['predicted_expression']:.1f},%\n"
             
             st.download_button(
                 label="📊 Download Data (CSV)",
-                data=csv_string,
+                data=csv_data,
                 file_name=f"optimization_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                 mime="text/csv",
                 use_container_width=True
             )
         
         with col3:
-            # Create results summary
-            summary = f"""
-RennetOptiMax Pro - Optimization Summary
+            # Summary report
+            summary = f"""RennetOptiMax Pro - Optimization Summary
 Generated: {results['timestamp']}
 
 SYSTEM:
 Vector: {results['vector']['name']}
 Host: {results['host']['strain']}
 
-OPTIMIZED PARAMETERS:
+BEST PARAMETERS:
 Temperature: {best_params['temperature']}°C
-Induction Time: {best_params['induction_time']} hours  
+Induction Time: {best_params['induction_time']} hours
 Inducer: {best_params['inducer_concentration']} mM
 OD600: {best_params['OD600_at_induction']}
 Media: {best_params['media_composition']}
 
 PERFORMANCE:
-Predicted Expression: {best_suggestion['predicted_expression']:.1f}%
+Expression: {best_suggestion['predicted_expression']:.1f}%
 Confidence: {best_suggestion['confidence']:.1f}%
 Improvement: {(best_suggestion['predicted_expression'] - current_expr):+.1f}%
 
-Powered by NeoRen AI Technology
-            """
+Powered by NeoRen AI Technology"""
             
             st.download_button(
                 label="📋 Download Summary",
                 data=summary,
-                file_name=f"optimization_summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+                file_name=f"summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
                 mime="text/plain",
                 use_container_width=True
             )
@@ -4792,227 +1986,9 @@ Powered by NeoRen AI Technology
         if st.button("🧬 Try Different Vector", use_container_width=True):
             st.session_state.page = 'vectors'
             st.rerun()
-    
-    # Success stories and tips
-    st.markdown("### 💡 Pro Tips for Success")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("""
-        **🔬 Before You Start:**
-        - Verify plasmid sequence and reading frame
-        - Check antibiotic stocks are fresh and active
-        - Ensure competent cells are high quality
-        - Have all materials ready before starting
-        """)
-    
-    with col2:
-        st.markdown("""
-        **📊 During Expression:**
-        - Monitor OD600 carefully for precise induction timing
-        - Take samples before and after induction for comparison
-        - Keep detailed notes of actual conditions used
-        - Be prepared to adjust based on initial results
-        """)
-
-def show_restricted_feature(feature_name):
-    """Show comprehensive message for restricted features"""
-    st.error(f"🔒 {feature_name} requires an active subscription or trial.")
-    
-    # Feature preview
-    st.markdown(f"### 👀 {feature_name} Preview")
-    st.info("Here's what you're missing out on with premium access:")
-    
-    if "Vector" in feature_name:
-        st.markdown("""
-        - 🧬 **8+ Expression Vectors:** Complete database with pET, pBAD, pMAL, pGEX series
-        - 🔍 **Advanced Filtering:** Find vectors by promoter, tag type, expression level
-        - 📊 **Performance Analytics:** Data-driven vector recommendations
-        - 💡 **Smart Suggestions:** AI-powered vector matching for your protein
-        """)
-    elif "Host" in feature_name:
-        st.markdown("""
-        - 🦠 **8+ E. coli Strains:** Specialized strains for different protein types
-        - 🧬 **Compatibility Analysis:** Perfect strain matching for your system
-        - 📈 **Success Predictions:** ML-based strain performance forecasting
-        - 🔬 **Special Applications:** Membrane proteins, disulfide bonds, toxic proteins
-        """)
-    elif "Sequence" in feature_name:
-        st.markdown("""
-        - 🔬 **Comprehensive Analysis:** 15+ protein properties analyzed
-        - 🎯 **Expression Predictions:** Solubility, aggregation, stability assessment
-        - 💡 **Smart Recommendations:** Tailored advice for your specific protein
-        - 📊 **Visual Reports:** Beautiful charts and exportable analysis reports
-        """)
-    elif "Parameters" in feature_name:
-        st.markdown("""
-        - ⚙️ **Advanced Parameter Tuning:** Temperature, timing, induction optimization
-        - 🤖 **AI Suggestions:** ML-powered parameter recommendations
-        - 🧪 **Additive Recommendations:** Chemical enhancers and troubleshooting agents
-        - 📋 **Protocol Generation:** Step-by-step customized protocols
-        """)
-    elif "Optimization" in feature_name:
-        st.markdown("""
-        - 🧠 **AI-Powered Engine:** 94% accurate machine learning predictions
-        - 🎯 **Multi-Parameter Optimization:** Thousands of combinations analyzed
-        - 📈 **Performance Forecasting:** Expression level and success probability
-        - 💎 **Advanced Analytics:** Confidence scores and risk assessment
-        """)
-    elif "Results" in feature_name:
-        st.markdown("""
-        - 📊 **Interactive Visualizations:** Beautiful charts and performance metrics
-        - 📋 **Complete Protocols:** Step-by-step laboratory procedures
-        - 📄 **Export Capabilities:** PDF reports, CSV data, protocol documents
-        - 🔄 **Results History:** Track and compare multiple optimizations
-        """)
-    
-    # Upgrade options
-    st.markdown("### 🚀 Get Full Access")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.markdown(f"""
-        <div style="border: 2px solid #1976d2; 
-                    border-radius: 10px; 
-                    padding: 20px; 
-                    text-align: center;
-                    background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);">
-            <h4 style="color: #1976d2; margin: 0 0 10px 0;">👨‍💼 Try Admin Demo</h4>
-            <p style="margin: 5px 0; font-size: 14px;">Instant full access</p>
-            <p style="margin: 5px 0; font-size: 14px;">All features unlocked</p>
-            <p style="margin: 5px 0; font-size: 14px;">No time limits</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        if st.button("🚀 Launch Admin Demo", use_container_width=True, type="primary"):
-            success, user_data = demo_login('admin')
-            if success:
-                st.success(f"Welcome {user_data['name']}! Full access granted.")
-                st.balloons()
-                st.rerun()
-    
-    with col2:
-        st.markdown(f"""
-        <div style="border: 2px solid #4caf50; 
-                    border-radius: 10px; 
-                    padding: 20px; 
-                    text-align: center;
-                    background: linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%);">
-            <h4 style="color: #4caf50; margin: 0 0 10px 0;">🎓 Student Trial</h4>
-            <p style="margin: 5px 0; font-size: 14px;">30-day free trial</p>
-            <p style="margin: 5px 0; font-size: 14px;">Core features included</p>
-            <p style="margin: 5px 0; font-size: 14px;">Perfect for learning</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        if st.button("📚 Start Free Trial", use_container_width=True):
-            success, user_data = demo_login('student')
-            if success:
-                st.success(f"Welcome {user_data['name']}! Trial activated.")
-                st.rerun()
-    
-    with col3:
-        st.markdown(f"""
-        <div style="border: 2px solid #ff6600; 
-                    border-radius: 10px; 
-                    padding: 20px; 
-                    text-align: center;
-                    background: linear-gradient(135deg, #fff8f0 0%, #ffebdb 100%);">
-            <h4 style="color: #ff6600; margin: 0 0 10px 0;">🛒 Buy NeoRen Product</h4>
-            <p style="margin: 5px 0; font-size: 14px;">500g Chymosin Powder</p>
-            <p style="margin: 5px 0; font-size: 14px;">+ 1 Year Platform Access</p>
-            <p style="margin: 5px 0; font-size: 14px;">Premium value bundle</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        st.link_button("🛒 Shop NeoRen", NEOREN_WEBSITE, use_container_width=True)
-    
-    # Feature comparison table
-    st.markdown("### 📊 Feature Comparison")
-    
-    comparison_data = {
-        'Feature': [
-            '🧬 Vector Database',
-            '🦠 Host Database', 
-            '🔬 Sequence Analysis',
-            '⚙️ Parameter Configuration',
-            '🎯 AI Optimization',
-            '📊 Results & Analytics',
-            '📋 Protocol Generation',
-            '📄 Export Capabilities',
-            '🔄 History Tracking',
-            '📞 Priority Support'
-        ],
-        'Free Access': [
-            '✅ Basic vectors',
-            '✅ Basic hosts',
-            '❌ Limited',
-            '❌ Basic only', 
-            '❌ No',
-            '❌ No',
-            '❌ No',
-            '❌ No',
-            '❌ No',
-            '❌ Community only'
-        ],
-        'Trial (30 days)': [
-            '✅ Full database',
-            '✅ Full database',
-            '✅ Complete analysis',
-            '✅ Advanced tuning',
-            '✅ AI-powered',
-            '✅ Full analytics',
-            '✅ Custom protocols',
-            '✅ All formats',
-            '✅ Full history',
-            '✅ Email support'
-        ],
-        'Subscription': [
-            '✅ Full + Updates',
-            '✅ Full + Updates',
-            '✅ Complete + New features',
-            '✅ Advanced + Custom',
-            '✅ AI + Priority',
-            '✅ Advanced + Insights',
-            '✅ Custom + Templates',
-            '✅ All + Automation',
-            '✅ Unlimited',
-            '✅ Priority + Phone'
-        ]
-    }
-    
-    comparison_df = pd.DataFrame(comparison_data)
-    st.dataframe(comparison_df, use_container_width=True, hide_index=True)
-    
-    # Call to action
-    st.markdown("### 🌟 Join Thousands of Satisfied Researchers")
-    
-    testimonials = [
-        {
-            "quote": "RennetOptiMax Pro reduced our optimization time from weeks to days. The AI predictions were incredibly accurate.",
-            "author": "Dr. Sarah Chen, BioTech Solutions"
-        },
-        {
-            "quote": "The platform helped us achieve 85% reduction in failed expressions. It's now essential to our workflow.",
-            "author": "Prof. Michael Rodriguez, UC Davis"
-        },
-        {
-            "quote": "NeoRen's platform combined with their chymosin gave us the perfect sustainable solution.",
-            "author": "Lisa Thompson, Alpine Dairy"
-        }
-    ]
-    
-    for testimonial in testimonials:
-        st.markdown(f"""
-        > *"{testimonial['quote']}"*
-        
-        **{testimonial['author']}**
-        """)
 
 # ----------------------
-# Main Application
+# Main Application (COMPLETE)
 # ----------------------
 
 def main():
@@ -5075,7 +2051,6 @@ def main():
     
     # Display the appropriate page based on session state
     current_page = st.session_state.page
-    username = st.session_state.username
     
     if current_page == 'home':
         show_home_page()
@@ -5096,6 +2071,9 @@ def main():
     else:
         # Default to home page
         show_home_page()
+    
+    # Add developer credit at the end
+    add_developer_credit()
 
 # Application entry point
 if __name__ == "__main__":
