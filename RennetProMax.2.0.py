@@ -1,7 +1,7 @@
-﻿# RennetOptiMax_Pro_Final.py - Version Finale
+﻿# RennetOptiMax_Pro_Complete.py - Version Complète et Fonctionnelle
 # -------------------------------------------------------------------
-# Run with: streamlit run RennetOptiMax_Pro_Final.py
-# Requirements: pip install streamlit pandas numpy scikit-learn plotly joblib biopython streamlit-authenticator==0.2.3
+# Run with: streamlit run RennetOptiMax_Pro_Complete.py
+# Requirements: pip install streamlit pandas numpy scikit-learn plotly joblib biopython
 
 import streamlit as st
 import pandas as pd
@@ -13,9 +13,6 @@ from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import train_test_split
-import streamlit_authenticator as stauth
-import yaml
-from yaml.loader import SafeLoader
 import os
 import json
 import random
@@ -39,10 +36,12 @@ st.set_page_config(
 os.makedirs('data', exist_ok=True)
 os.makedirs('models', exist_ok=True)
 os.makedirs('results', exist_ok=True)
-os.makedirs('users', exist_ok=True)
+
+# NeoRen Product Link
+NEOREN_WEBSITE = "https://neoren.mystrikingly.com/"
 
 # ----------------------
-# Authentication Configuration (CORRIGÉ)
+# Authentication System
 # ----------------------
 
 def hash_password(password):
@@ -53,108 +52,61 @@ def verify_password(password, hashed_password):
     """Verify a password against its hash"""
     return hash_password(password) == hashed_password
 
-def create_default_auth_config():
-    """Create default authentication configuration"""
-    config = {
-        'credentials': {
-            'usernames': {
-                'admin': {
-                    'email': 'admin@rennetoptimax.com',
-                    'name': 'Administrator',
-                    'password': hash_password('admin123'),
-                    'user_type': 'admin',
-                    'subscription_status': 'lifetime',
-                    'subscription_expiry': None,
-                    'referral_code': 'ADMIN001',
-                    'referrals_made': 0,
-                    'free_access_features': ['all'],
-                    'trial_used': False,
-                    'trial_expiry': None
-                },
-                'demo_student': {
-                    'email': 'student@example.com',
-                    'name': 'Demo Student',
-                    'password': hash_password('student123'),
-                    'user_type': 'student',
-                    'subscription_status': 'trial',
-                    'subscription_expiry': (datetime.now() + timedelta(days=30)).isoformat(),
-                    'referral_code': 'STU001',
-                    'referrals_made': 0,
-                    'free_access_features': ['vectors', 'hosts'],
-                    'trial_used': False,
-                    'trial_expiry': (datetime.now() + timedelta(days=30)).isoformat()
-                }
-            }
+def create_default_users():
+    """Create default user database"""
+    users = {
+        'admin': {
+            'password': hash_password('admin123'),
+            'name': 'Administrator',
+            'email': 'admin@rennetoptimax.com',
+            'user_type': 'admin',
+            'subscription_status': 'lifetime',
+            'subscription_expiry': None,
+            'referral_code': 'ADMIN001',
+            'trial_expiry': None
         },
-        'cookie': {
-            'name': 'rennet_auth_cookie',
-            'key': 'random_signature_key_123456789',
-            'expiry_days': 30
+        'demo_user': {
+            'password': hash_password('demo123'),
+            'name': 'Demo User',
+            'email': 'demo@example.com',
+            'user_type': 'professional',
+            'subscription_status': 'trial',
+            'subscription_expiry': (datetime.now() + timedelta(days=30)).isoformat(),
+            'referral_code': 'DEMO001',
+            'trial_expiry': (datetime.now() + timedelta(days=30)).isoformat()
         }
     }
-    return config
+    return users
 
-def load_auth_config():
-    """Load authentication configuration"""
-    config_file = 'data/auth_config.yaml'
-    if os.path.exists(config_file):
-        with open(config_file, 'r') as file:
-            config = yaml.load(file, Loader=SafeLoader)
+def load_users():
+    """Load users from file or create default"""
+    users_file = 'data/users.json'
+    if os.path.exists(users_file):
+        with open(users_file, 'r') as f:
+            return json.load(f)
     else:
-        config = create_default_auth_config()
-        save_auth_config(config)
-    return config
+        users = create_default_users()
+        save_users(users)
+        return users
 
-def save_auth_config(config):
-    """Save authentication configuration"""
-    with open('data/auth_config.yaml', 'w') as file:
-        yaml.dump(config, file, default_flow_style=False)
-
-def generate_referral_code():
-    """Generate a unique referral code"""
-    return 'REF' + str(uuid.uuid4()).upper()[:6]
-
-def add_new_user(username, email, name, password, user_type='professional'):
-    """Add a new user to the authentication system"""
-    config = load_auth_config()
-    
-    # Hash the password
-    hashed_password = hash_password(password)
-    
-    # Create new user data
-    new_user = {
-        'email': email,
-        'name': name,
-        'password': hashed_password,
-        'user_type': user_type,
-        'subscription_status': 'trial',
-        'subscription_expiry': (datetime.now() + timedelta(days=30)).isoformat(),
-        'referral_code': generate_referral_code(),
-        'referrals_made': 0,
-        'free_access_features': ['vectors', 'hosts'],
-        'trial_used': False,
-        'trial_expiry': (datetime.now() + timedelta(days=30)).isoformat()
-    }
-    
-    config['credentials']['usernames'][username] = new_user
-    save_auth_config(config)
-    return True
+def save_users(users):
+    """Save users to file"""
+    with open('data/users.json', 'w') as f:
+        json.dump(users, f, indent=2)
 
 def authenticate_user(username, password):
     """Authenticate a user"""
-    config = load_auth_config()
-    users = config['credentials']['usernames']
-    
+    users = load_users()
     if username in users:
         user_data = users[username]
         if verify_password(password, user_data['password']):
-            return True, user_data['name']
+            return True, user_data
     return False, None
 
 def check_user_access(username, feature):
     """Check if user has access to a specific feature"""
-    config = load_auth_config()
-    user_data = config['credentials']['usernames'].get(username, {})
+    users = load_users()
+    user_data = users.get(username, {})
     
     # Admin has access to everything
     if user_data.get('user_type') == 'admin':
@@ -166,47 +118,17 @@ def check_user_access(username, feature):
     if subscription_status == 'lifetime':
         return True
     
-    if subscription_status == 'active':
-        expiry = user_data.get('subscription_expiry')
-        if expiry and datetime.fromisoformat(expiry) > datetime.now():
-            return True
-    
     if subscription_status == 'trial':
         trial_expiry = user_data.get('trial_expiry')
         if trial_expiry and datetime.fromisoformat(trial_expiry) > datetime.now():
             return True
     
-    # Check free access features
-    free_features = user_data.get('free_access_features', [])
-    if feature in free_features or 'all' in free_features:
+    # Free features
+    free_features = ['vectors', 'hosts']
+    if feature in free_features:
         return True
     
     return False
-
-# ----------------------
-# Pricing and Plans Configuration
-# ----------------------
-
-PRICING_PLANS = {
-    'student': {
-        '1_month': 5,
-        '6_months': 25,
-        '1_year': 40
-    },
-    'academic': {
-        '1_month': 7,
-        '6_months': 35,
-        '1_year': 60
-    },
-    'professional': {
-        '1_month': 10,
-        '6_months': 50,
-        '1_year': 85
-    }
-}
-
-# NeoRen Product Link
-NEOREN_WEBSITE = "https://neoren.mystrikingly.com/"
 
 # ----------------------
 # Data Classes & Models
@@ -371,6 +293,79 @@ class ExpressionOptimizer:
         except Exception as e:
             st.error(f"Error making prediction: {e}")
             return 50.0
+    
+    def get_feature_importance(self):
+        """Get feature importance from the model"""
+        if self.model is None:
+            self.load_model()
+            
+        importances = self.model.feature_importances_
+        feature_names = self.numeric_features + [
+            f"{cat}_{val}" for cat in self.categorical_features 
+            for val in ['value1', 'value2', 'value3', 'value4', 'value5']
+        ]
+        
+        # Trim to match importances length
+        feature_names = feature_names[:len(importances)]
+        
+        importance_df = pd.DataFrame({
+            'Feature': feature_names,
+            'Importance': importances
+        })
+        
+        return importance_df.sort_values('Importance', ascending=False)
+    
+    def suggest_optimal_conditions(self, vector_name, host_strain, protein_properties, n_suggestions=5):
+        """Suggest optimal conditions based on protein properties"""
+        if self.model is None:
+            self.load_model()
+            
+        # Generate parameter combinations
+        param_ranges = {
+            'temperature': [16, 25, 30, 37],
+            'induction_time': [2, 4, 6],
+            'inducer_concentration': [0.1, 0.5, 1.0],
+            'OD600_at_induction': [0.4, 0.6, 0.8],
+            'media_composition': ['LB', 'TB', 'M9', '2xYT']
+        }
+        
+        # Adjust based on protein properties
+        if protein_properties.get('has_disulfide_bonds', False):
+            param_ranges['temperature'] = [16, 25, 30]
+            
+        if protein_properties.get('is_membrane_protein', False):
+            param_ranges['temperature'] = [16, 25]
+            param_ranges['inducer_concentration'] = [0.1, 0.2, 0.5]
+        
+        # Generate combinations
+        import itertools
+        suggestions = []
+        
+        for temp in param_ranges['temperature'][:2]:  # Limit combinations
+            for media in param_ranges['media_composition'][:2]:
+                for inducer in param_ranges['inducer_concentration'][:2]:
+                    params = {
+                        'vector_type': vector_name,
+                        'host_strain': host_strain,
+                        'temperature': temp,
+                        'induction_time': 4,
+                        'inducer_concentration': inducer,
+                        'OD600_at_induction': 0.6,
+                        'media_composition': media
+                    }
+                    
+                    expression = self.predict_expression(params)
+                    
+                    suggestions.append({
+                        'parameters': params,
+                        'predicted_expression': float(expression),
+                        'additives': []
+                    })
+        
+        # Sort by expression level
+        suggestions.sort(key=lambda x: x['predicted_expression'], reverse=True)
+        
+        return suggestions[:n_suggestions]
 
 # ----------------------
 # Database Functions
@@ -394,16 +389,16 @@ def load_vectors():
                    {"cloning_sites": ["NdeI", "XhoI", "BamHI", "EcoRI"], "tag_location": "N-terminal", "induction": "IPTG"}),
             Vector(3, "pET22b", 5493, "T7", "T7", "pBR322", "Ampicillin", ["His-tag", "C-terminal", "pelB"],
                    "Periplasmic expression vector with pelB signal sequence",
-                   {"cloning_sites": ["NdeI", "XhoI", "BamHI", "EcoRI"], "tag_location": "C-terminal", "induction": "IPTG", "secretion": "periplasmic"}),
+                   {"cloning_sites": ["NdeI", "XhoI", "BamHI", "EcoRI"], "tag_location": "C-terminal", "induction": "IPTG"}),
             Vector(4, "pBAD", 4102, "araBAD", "rrnB", "pBR322", "Ampicillin", ["His-tag", "C-terminal"],
                    "Arabinose-inducible expression vector",
                    {"cloning_sites": ["NcoI", "HindIII", "XhoI"], "tag_location": "C-terminal", "induction": "Arabinose"}),
             Vector(5, "pMAL-c5X", 5677, "tac", "lambda t0", "pBR322", "Ampicillin", ["MBP", "N-terminal"],
                    "MBP fusion vector for improved solubility",
-                   {"cloning_sites": ["NdeI", "EcoRI", "BamHI", "SalI"], "tag_location": "N-terminal", "induction": "IPTG", "purification": "Amylose resin"}),
+                   {"cloning_sites": ["NdeI", "EcoRI", "BamHI", "SalI"], "tag_location": "N-terminal", "induction": "IPTG"}),
             Vector(6, "pGEX-6P-1", 4984, "tac", "lambda t0", "pBR322", "Ampicillin", ["GST", "N-terminal"],
                    "GST fusion vector for improved solubility",
-                   {"cloning_sites": ["BamHI", "EcoRI", "SalI", "NotI"], "tag_location": "N-terminal", "induction": "IPTG", "protease_site": "PreScission"})
+                   {"cloning_sites": ["BamHI", "EcoRI", "SalI", "NotI"], "tag_location": "N-terminal", "induction": "IPTG"})
         ]
         save_vectors(vectors)
         
@@ -437,10 +432,10 @@ def load_hosts():
             Host(4, "C41(DE3)", "E. coli", "F– ompT gal dcm hsdSB(rB- mB-) (DE3)",
                  "Optimized for membrane proteins and toxic proteins", ["Membrane protein expression", "Toxic protein compatible", "T7 expression"],
                  ["Lower expression of soluble proteins"]),
-            Host(5, "SHuffle T7", "E. coli", "F´ lac, pro, lacIQ / Δ(ara-leu)7697 araD139 fhuA2 lacZ::T7 gene1 Δ(phoA)PvuII phoR ahpC* galE (or U) galK λatt::pNEB3-r1-cDsbC (SpecR, lacIq) ΔtrxB rpsL150(StrR) Δgor Δ(malF)3",
+            Host(5, "SHuffle T7", "E. coli", "Enhanced disulfide bond formation strain",
                  "Enhanced disulfide bond formation in cytoplasm", ["Disulfide bond formation", "T7 expression", "Oxidizing cytoplasmic environment"],
                  ["Slower growth", "Lower overall yield"]),
-            Host(6, "ArcticExpress(DE3)", "E. coli", "E. coli B F– ompT hsdS(rB– mB–) dcm+ Tetr gal λ(DE3) endA Hte [cpn10 cpn60 Gentr]",
+            Host(6, "ArcticExpress(DE3)", "E. coli", "Cold expression strain with chaperones",
                  "Cold-adapted chaperonins for low temperature expression", ["Low temperature expression", "Cold-adapted chaperones", "T7 expression"],
                  ["Gentamicin resistance", "Slower growth"])
         ]
@@ -455,7 +450,106 @@ def save_hosts(hosts):
         json.dump(host_data, f, indent=2)
 
 # ----------------------
-# UI Components (CORRIGÉS)
+# Sequence Analysis Functions
+# ----------------------
+
+def analyze_protein_sequence(sequence):
+    """Analyze a protein sequence for expression optimization"""
+    # Clean sequence
+    sequence = re.sub(r'[^A-Za-z]', '', sequence.upper())
+    
+    if not sequence:
+        return {"error": "Invalid sequence. Please provide a valid protein sequence."}
+    
+    try:
+        # Basic properties
+        mol_weight = len(sequence) * 110 / 1000  # Rough estimation in kDa
+        
+        # Amino acid composition
+        aa_count = {}
+        for aa in 'ACDEFGHIKLMNPQRSTVWY':
+            aa_count[aa] = sequence.count(aa)
+        
+        total_aa = len(sequence)
+        aa_percent = {aa: count/total_aa for aa, count in aa_count.items()}
+        
+        # Hydrophobicity (simple estimation)
+        hydrophobic_aas = 'AILMFWYV'
+        hydrophobicity = sum(1 for aa in sequence if aa in hydrophobic_aas) / total_aa
+        
+        # Charged residues
+        charged_aas = 'DEKR'
+        charged_residues = sum(1 for aa in sequence if aa in charged_aas) / total_aa
+        
+        # Cysteine analysis
+        cys_count = aa_count.get('C', 0)
+        has_disulfide_potential = cys_count >= 2
+        
+        # Instability prediction (simplified)
+        instability_index = abs(hydrophobicity - 0.5) * 100 + charged_residues * 50
+        is_stable = instability_index < 40
+        
+        # Issues and recommendations
+        issues = []
+        recommendations = []
+        
+        if has_disulfide_potential:
+            issues.append(f"Multiple cysteines detected ({cys_count} cysteines)")
+            recommendations.append("Consider using SHuffle T7 strain for disulfide bond formation")
+        
+        is_hydrophobic = hydrophobicity > 0.4
+        if is_hydrophobic:
+            issues.append("Highly hydrophobic protein (potential membrane protein)")
+            recommendations.append("Consider using C41(DE3) strain for membrane proteins")
+            recommendations.append("Lower expression temperature (16-25°C)")
+        
+        if not is_stable:
+            issues.append(f"Potentially unstable protein (instability index: {instability_index:.1f})")
+            recommendations.append("Consider fusion tags like MBP or GST to improve stability")
+            recommendations.append("Lower expression temperature (16-25°C)")
+        
+        if mol_weight > 70:
+            issues.append(f"Large protein ({mol_weight:.1f} kDa)")
+            recommendations.append("Consider co-expression with chaperones")
+            recommendations.append("Lower expression temperature (16-25°C)")
+        
+        # Rare codons
+        rare_aas = []
+        rare_threshold = 0.05
+        rare_codons = {'R': 'Arginine', 'C': 'Cysteine', 'I': 'Isoleucine', 'L': 'Leucine', 'P': 'Proline'}
+        
+        for aa, name in rare_codons.items():
+            if aa_percent.get(aa, 0) > rare_threshold:
+                rare_aas.append(name)
+        
+        if rare_aas:
+            issues.append(f"High content of amino acids with rare codons: {', '.join(rare_aas)}")
+            recommendations.append("Consider using Rosetta(DE3) strain for rare codon optimization")
+        
+        return {
+            "sequence_length": total_aa,
+            "molecular_weight": round(mol_weight, 2),
+            "instability_index": round(instability_index, 2),
+            "is_stable": is_stable,
+            "hydrophobicity": round(hydrophobicity, 3),
+            "charged_residues": round(charged_residues, 3),
+            "cysteine_count": cys_count,
+            "has_disulfide_potential": has_disulfide_potential,
+            "is_hydrophobic": is_hydrophobic,
+            "issues": issues,
+            "recommendations": recommendations,
+            "protein_properties": {
+                "size": mol_weight,
+                "has_disulfide_bonds": has_disulfide_potential,
+                "is_membrane_protein": is_hydrophobic,
+                "is_toxic": not is_stable
+            }
+        }
+    except Exception as e:
+        return {"error": f"Error analyzing sequence: {str(e)}"}
+
+# ----------------------
+# UI Components
 # ----------------------
 
 def init_session_state():
@@ -472,8 +566,20 @@ def init_session_state():
         st.session_state.selected_vector = None
     if 'selected_host' not in st.session_state:
         st.session_state.selected_host = None
-    if 'show_signup' not in st.session_state:
-        st.session_state.show_signup = False
+    if 'protein_sequence' not in st.session_state:
+        st.session_state.protein_sequence = ""
+    if 'sequence_analysis' not in st.session_state:
+        st.session_state.sequence_analysis = None
+    if 'expression_parameters' not in st.session_state:
+        st.session_state.expression_parameters = {
+            'temperature': 30,
+            'induction_time': 4,
+            'inducer_concentration': 0.5,
+            'OD600_at_induction': 0.6,
+            'media_composition': 'LB'
+        }
+    if 'optimization_results' not in st.session_state:
+        st.session_state.optimization_results = None
     if 'show_login' not in st.session_state:
         st.session_state.show_login = False
 
@@ -522,118 +628,8 @@ def show_product_banner():
     </div>
     """, unsafe_allow_html=True)
 
-def show_access_plans():
-    """Display access plans and pricing"""
-    st.markdown("## 🎁 Unlock Full Power of RennetOptiMax Pro")
-    st.markdown("*Choose the access method that fits you best:*")
-    
-    # Free Access
-    with st.expander("🆓 Free Access for All", expanded=True):
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown("**✅ 1-month free trial** with all features")
-            st.markdown("**✅ Lifetime access** to 2 core features")
-        with col2:
-            st.markdown("- Vector Selection Tool")
-            st.markdown("- Host Strain Database")
-    
-    # Referral Rewards
-    with st.expander("🔗 Referral Reward Program"):
-        st.markdown("**Share your referral link and earn rewards!**")
-        if st.session_state.authenticated:
-            config = load_auth_config()
-            username = st.session_state.username
-            referral_code = config['credentials']['usernames'][username]['referral_code']
-            st.code(f"Your Referral Code: {referral_code}")
-            st.markdown("**🎁 If 1 person buys via your link → 6 months free access**")
-        else:
-            st.info("Login to get your personal referral code!")
-    
-    # Product Purchase Bonus
-    with st.expander("🛒 Product Purchase Bonus"):
-        st.markdown("**Buy 500g of NeoRen Chymosin Powder → Get 1 year full access instantly**")
-        st.markdown("- Premium sustainable rennet")
-        st.markdown("- Immediate platform access")
-        st.markdown("- Technical support included")
-        
-        # Link to NeoRen website
-        st.markdown(f"""
-        <div style="text-align: center; margin: 20px 0;">
-            <a href="{NEOREN_WEBSITE}" target="_blank" style="background: #4CAF50; 
-                      color: white; 
-                      padding: 10px 20px; 
-                      border-radius: 5px; 
-                      text-decoration: none; 
-                      display: inline-block;">
-                🌐 Visit NeoRen Website
-            </a>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    # Subscription Plans
-    with st.expander("💳 Subscription Plans (Post-Trial)"):
-        st.markdown("**Affordable pricing tailored to different user profiles:**")
-        
-        pricing_df = pd.DataFrame({
-            'User Type': ['🎓 Student', '🧪 Academic', '🧑‍💼 Professional'],
-            '1 Month': ['$5', '$7', '$10'],
-            '6 Months': ['$25', '$35', '$50'],
-            '1 Year': ['$40', '$60', '$85']
-        })
-        
-        st.table(pricing_df)
-        st.markdown("**✅ All subscriptions include:** Full access, technical support, and updates")
-    
-    # Loyalty Program
-    with st.expander("💎 Loyalty Program"):
-        st.markdown("**Long-term subscribers and highly active users may qualify for:**")
-        st.markdown("🌟 **Lifetime unlimited access** — at no extra cost")
-        st.markdown("- Based on usage patterns and subscription history")
-        st.markdown("- Exclusive benefits for power users")
-
-def show_signup_form():
-    """Display user registration form (CORRIGÉ)"""
-    st.markdown("## 📝 Create Your Account")
-    
-    with st.form("signup_form"):
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            username = st.text_input("Username*")
-            email = st.text_input("Email*")
-            name = st.text_input("Full Name*")
-        
-        with col2:
-            user_type = st.selectbox("User Type", ["student", "academic", "professional"])
-            password = st.text_input("Password*", type="password")
-            confirm_password = st.text_input("Confirm Password*", type="password")
-        
-        referral_code = st.text_input("Referral Code (Optional)", help="Enter a referral code if you have one")
-        
-        terms_accepted = st.checkbox("I agree to the Terms of Service and Privacy Policy*")
-        
-        submitted = st.form_submit_button("🚀 Create Account & Start Free Trial")
-        
-        if submitted:
-            if not all([username, email, name, password]):
-                st.error("Please fill in all required fields.")
-            elif password != confirm_password:
-                st.error("Passwords do not match.")
-            elif not terms_accepted:
-                st.error("Please accept the Terms of Service.")
-            else:
-                try:
-                    if add_new_user(username, email, name, password, user_type):
-                        st.success("Account created successfully! Please login to continue.")
-                        st.balloons()
-                        if st.button("Go to Login"):
-                            st.session_state.show_signup = False
-                            st.rerun()
-                except Exception as e:
-                    st.error(f"Error creating account: {e}")
-
 def show_login_form():
-    """Display login form (CORRIGÉ)"""
+    """Display login form"""
     st.markdown("## 🔐 Login to Your Account")
     
     with st.form("login_form"):
@@ -646,157 +642,54 @@ def show_login_form():
             login_button = st.form_submit_button("🔐 Login", use_container_width=True, type="primary")
         
         with col2:
-            forgot_password = st.form_submit_button("🔑 Forgot Password?", use_container_width=True)
+            demo_button = st.form_submit_button("🎮 Demo Login", use_container_width=True)
         
         if login_button:
             if username and password:
-                authenticated, user_name = authenticate_user(username, password)
+                authenticated, user_data = authenticate_user(username, password)
                 if authenticated:
                     st.session_state.authenticated = True
                     st.session_state.username = username
-                    st.session_state.user_name = user_name
+                    st.session_state.user_name = user_data['name']
                     st.session_state.show_login = False
-                    st.success(f"Welcome back, {user_name}!")
+                    st.success(f"Welcome back, {user_data['name']}!")
                     st.rerun()
                 else:
                     st.error("Invalid username or password")
             else:
                 st.error("Please enter both username and password")
         
-        if forgot_password:
-            st.info("Password reset functionality would be implemented here")
-
-def show_user_dashboard():
-    """Display user dashboard (CORRIGÉ)"""
-    if not st.session_state.authenticated:
-        st.error("Please login to access the dashboard.")
-        return
-    
-    config = load_auth_config()
-    username = st.session_state.username
-    user_data = config['credentials']['usernames'][username]
-    
-    st.markdown(f"## 👋 Welcome, {user_data['name']}!")
-    
-    # Account Status Cards
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric("👤 Account Type", user_data['user_type'].title())
-    
-    with col2:
-        status = user_data['subscription_status']
-        st.metric("📊 Status", status.title())
-    
-    with col3:
-        referrals = user_data.get('referrals_made', 0)
-        st.metric("🔗 Referrals Made", referrals)
-    
-    with col4:
-        if user_data['subscription_expiry']:
-            expiry = datetime.fromisoformat(user_data['subscription_expiry'])
-            days_left = (expiry - datetime.now()).days
-            st.metric("⏰ Days Left", max(0, days_left))
-        else:
-            st.metric("⏰ Access", "Lifetime")
-    
-    # Referral Section
-    st.markdown("### 🔗 Your Referral Program")
-    
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        referral_code = user_data['referral_code']
-        st.code(f"Your Referral Code: {referral_code}")
-        st.markdown("Share this code to earn 6 months free access when someone purchases our product!")
-    
-    with col2:
-        if st.button("📧 Share via Email"):
-            st.info("Email sharing functionality would be implemented here")
-        if st.button("📱 Share on Social"):
-            st.info("Social sharing functionality would be implemented here")
-    
-    # Product Purchase Section
-    st.markdown("### 🛒 NeoRen Product Purchase")
-    
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        st.markdown("**Get 1 year of full access by purchasing our NeoRen Chymosin Powder (500g)**")
-        st.markdown("- Premium sustainable rennet for cheese production")
-        st.markdown("- 100% animal-free and environmentally friendly")
-        st.markdown("- Immediate access to all platform features")
-    
-    with col2:
-        st.markdown(f"""
-        <div style="text-align: center;">
-            <a href="{NEOREN_WEBSITE}" target="_blank" style="background: #ff6b6b; 
-                      color: white; 
-                      padding: 15px 25px; 
-                      border-radius: 5px; 
-                      text-decoration: none; 
-                      display: inline-block;
-                      font-weight: bold;">
-                🛒 Buy NeoRen Product
-            </a>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    # Quick Actions
-    st.markdown("### ⚡ Quick Actions")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        if st.button("🧬 Start Optimization", use_container_width=True):
-            st.session_state.page = 'vectors'
+        if demo_button:
+            # Demo login with admin credentials
+            st.session_state.authenticated = True
+            st.session_state.username = 'admin'
+            st.session_state.user_name = 'Administrator'
+            st.session_state.show_login = False
+            st.success("Demo login successful!")
             st.rerun()
-    
-    with col2:
-        if st.button("📊 View Results", use_container_width=True):
-            st.session_state.page = 'results'
-            st.rerun()
-    
-    with col3:
-        if st.button("❓ Get Support", use_container_width=True):
-            st.info("Support functionality would be implemented here.")
 
 def show_navigation():
-    """Display navigation sidebar (CORRIGÉ)"""
+    """Display navigation sidebar"""
     st.sidebar.title("🧬 RennetOptiMax Pro")
     
     # Authentication status
     if st.session_state.authenticated:
-        config = load_auth_config()
-        username = st.session_state.username
-        user_data = config['credentials']['usernames'][username]
+        users = load_users()
+        user_data = users.get(st.session_state.username, {})
         
-        st.sidebar.success(f"👋 Welcome, {user_data['name']}")
+        st.sidebar.success(f"👋 Welcome, {user_data.get('name', 'User')}")
         
-        # Navigation based on access level
+        # Navigation pages
         pages = {
             'dashboard': "🏠 Dashboard",
-            'home': "🌟 Home"
+            'home': "🌟 Home",
+            'vectors': "1. 🧬 Select Vector",
+            'hosts': "2. 🦠 Select Host",
+            'sequence': "3. 🔬 Analyze Sequence",
+            'parameters': "4. ⚙️ Set Parameters",
+            'optimize': "5. 🎯 Optimize Expression",
+            'results': "6. 📊 View Results"
         }
-        
-        # Check access for each feature
-        if check_user_access(username, 'vectors') or check_user_access(username, 'all'):
-            pages['vectors'] = "1. 🧬 Select Vector"
-        
-        if check_user_access(username, 'hosts') or check_user_access(username, 'all'):
-            pages['hosts'] = "2. 🦠 Select Host"
-        
-        if check_user_access(username, 'sequence') or check_user_access(username, 'all'):
-            pages['sequence'] = "3. 🔬 Analyze Sequence"
-        
-        if check_user_access(username, 'parameters') or check_user_access(username, 'all'):
-            pages['parameters'] = "4. ⚙️ Set Parameters"
-        
-        if check_user_access(username, 'optimize') or check_user_access(username, 'all'):
-            pages['optimize'] = "5. 🎯 Optimize Expression"
-        
-        if check_user_access(username, 'results') or check_user_access(username, 'all'):
-            pages['results'] = "6. 📊 View Results"
         
         # Display navigation buttons
         for page_id, page_name in pages.items():
@@ -853,7 +746,7 @@ def show_navigation():
     st.sidebar.caption("Version 2.0.0 | © 2025 NeoRen")
 
 def show_home_page():
-    """Display enhanced home page (CORRIGÉ)"""
+    """Display enhanced home page"""
     st.markdown("## 🌟 Welcome to RennetOptiMax Pro")
     
     # Product Banner
@@ -874,9 +767,6 @@ def show_home_page():
     - **Sustainable Focus**: Supporting eco-friendly biotechnology solutions
     """)
     
-    # Access Plans Section
-    show_access_plans()
-    
     # Features Overview
     st.markdown("### 🚀 Platform Features")
     
@@ -885,7 +775,7 @@ def show_home_page():
     with col1:
         st.markdown("""
         **🧬 Vector Selection**
-        - 50+ expression vectors
+        - 6+ expression vectors
         - Advanced filtering system
         - Compatibility predictions
         - Performance analytics
@@ -915,8 +805,10 @@ def show_home_page():
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        if st.button("🆓 Start Free Trial", use_container_width=True, type="primary"):
-            st.session_state.show_signup = True
+        if st.button("🆓 Demo Login", use_container_width=True, type="primary"):
+            st.session_state.authenticated = True
+            st.session_state.username = 'admin'
+            st.session_state.user_name = 'Administrator'
             st.rerun()
     
     with col2:
@@ -927,21 +819,66 @@ def show_home_page():
     with col3:
         st.link_button("🛒 Buy Product + Access", NEOREN_WEBSITE, use_container_width=True)
 
+def show_dashboard():
+    """Display user dashboard"""
+    if not st.session_state.authenticated:
+        st.error("Please login to access the dashboard.")
+        return
+    
+    users = load_users()
+    user_data = users.get(st.session_state.username, {})
+    
+    st.markdown(f"## 👋 Welcome, {user_data.get('name', 'User')}!")
+    
+    # Account Status Cards
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("👤 Account Type", user_data.get('user_type', 'Unknown').title())
+    
+    with col2:
+        status = user_data.get('subscription_status', 'None')
+        st.metric("📊 Status", status.title())
+    
+    with col3:
+        referral_code = user_data.get('referral_code', 'N/A')
+        st.metric("🔗 Referral Code", referral_code)
+    
+    with col4:
+        if user_data.get('subscription_expiry'):
+            try:
+                expiry = datetime.fromisoformat(user_data['subscription_expiry'])
+                days_left = (expiry - datetime.now()).days
+                st.metric("⏰ Days Left", max(0, days_left))
+            except:
+                st.metric("⏰ Access", "Active")
+        else:
+            st.metric("⏰ Access", "Lifetime")
+    
+    # Quick Actions
+    st.markdown("### ⚡ Quick Actions")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        if st.button("🧬 Start Optimization", use_container_width=True):
+            st.session_state.page = 'vectors'
+            st.rerun()
+    
+    with col2:
+        if st.button("📊 View Results", use_container_width=True):
+            st.session_state.page = 'results'
+            st.rerun()
+    
+    with col3:
+        st.link_button("🛒 Buy NeoRen Product", NEOREN_WEBSITE, use_container_width=True)
+
 def show_vectors_page():
-    """Display vector selection page with access control (CORRIGÉ)"""
+    """Display vector selection page"""
     username = st.session_state.username
     
     if not username or not check_user_access(username, 'vectors'):
         st.error("🔒 This feature requires a subscription. Please upgrade your account.")
-        st.info("You can access this feature with any subscription plan or during your free trial.")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("🚀 Upgrade Now", use_container_width=True, type="primary"):
-                st.session_state.page = 'dashboard'
-                st.rerun()
-        with col2:
-            st.link_button("🛒 Buy NeoRen Product", NEOREN_WEBSITE, use_container_width=True)
         return
     
     st.markdown("## 🧬 Expression Vector Selection")
@@ -1013,20 +950,11 @@ def show_vectors_page():
                             st.rerun()
 
 def show_hosts_page():
-    """Display host selection page with access control (CORRIGÉ)"""
+    """Display host selection page"""
     username = st.session_state.username
     
     if not username or not check_user_access(username, 'hosts'):
         st.error("🔒 This feature requires a subscription. Please upgrade your account.")
-        st.info("You can access this feature with any subscription plan or during your free trial.")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("🚀 Upgrade Now", use_container_width=True, type="primary"):
-                st.session_state.page = 'dashboard'
-                st.rerun()
-        with col2:
-            st.link_button("🛒 Buy NeoRen Product", NEOREN_WEBSITE, use_container_width=True)
         return
     
     st.markdown("## 🦠 Host Strain Selection")
@@ -1064,8 +992,612 @@ def show_hosts_page():
                         st.session_state.selected_host = host
                         st.rerun()
 
+def show_sequence_page():
+    """Display sequence analysis page"""
+    username = st.session_state.username
+    
+    if not username or not check_user_access(username, 'sequence'):
+        st.error("🔒 This feature requires a subscription. Please upgrade your account.")
+        return
+    
+    st.markdown("## 🔬 Protein Sequence Analysis")
+    
+    # Tabs for different input methods
+    tab1, tab2 = st.tabs(["Input Sequence", "Sample Sequences"])
+    
+    with tab1:
+        sequence_text = st.text_area(
+            "Enter protein sequence (amino acids):",
+            value=st.session_state.protein_sequence,
+            height=200,
+            help="Paste your protein sequence in single letter amino acid format (A, C, D, etc.)"
+        )
+        
+        if st.button("Analyze Sequence", key="analyze_btn", use_container_width=True):
+            if not sequence_text:
+                st.error("Please enter a protein sequence.")
+            else:
+                st.session_state.protein_sequence = sequence_text
+                st.session_state.sequence_analysis = analyze_protein_sequence(sequence_text)
+                st.rerun()
+    
+    with tab2:
+        sample_sequences = {
+            "Rennet (Chymosin)": "MEMKFLIFVLTILVLPVFGNLLVYAPFDEEPQQPWQVLSLRYNTKETCEKLVLLDLNQAPLPWHVTVQEDGRCLGGHLEAHQLYCNVTKSEHFRLATHLNDVVLAPTFCQESIENDSKLVLLDVDLPLSHFQLSAAPGTTLEASPNFISHYGIQHLCPNDIYPAGNCSEEGMDLRVTVSSTMDPNQLFTLQISRPWIVIGSDCPLDGLDCEPGYPCDFHPKYGQDGTVPFLVYEAYKSWKQTGVEILQTYCIYPSVVSPHCTSPTSSEPAPQDTVSLTIINHEIPYSQEALVRFENGSKNFRLGEHYLKACGETAYVWHEARKTNRFQVESFKESNTYLMHNLLDKYNCNVGFMPAYGFDQIIEGEEIVLRHSGEFAFSPETPASYTCVNEIFLRPTSNAYLKAQSCWAIPLFNSVPSTLMYMKYCGWSTANPDEIEIGSNSSHYKRTFGQNLDSSDKLNFTDMAGEVISVAITKSQGEKSDHHHHHHHSRSAAGRLEHHHHHH",
+            "GFP": "MVSKGEELFTGVVPILVELDGDVNGHKFSVSGEGEGDATYGKLTLKFICTTGKLPVPWPTLVTTLTYGVQCFSRYPDHMKQHDFFKSAMPEGYVQERTIFFKDDGNYKTRAEVKFEGDTLVNRIELKGIDFKEDGNILGHKLEYNYNSHNVYIMADKQKNGIKVNFKIRHNIEDGSVQLADHYQQNTPIGDGPVLLPDNHYLSTQSALSKDPNEKRDHMVLLEFVTAAGITLGMDELYK",
+            "Small Test Protein": "MGSSHHHHHHSSGLVPRGSHMQCVVLVTLLCFAACSAVCEPRCEPRCEPRCNNGCPAFCQCLYNGCPVLGAEESPTIVKGKDMCSPCGKNGPKACEAEKSKCNGGHCPFAKPCKKGCKGRCQYNYPDKKGFGSCPFVENVPYTIKVGSCPFNFNTFANKCRFGYQMGTLCPFEDPHSKPCTDGMTPTMCPEDCESGLRYSTCPFNYQPNDKLEWPRCPTGYRTTDKACPDGMPSQVCPSAQTTTAPAAKQSPAAKQSPAAKQSPAAKQSPAAAK"
+        }
+        
+        selected_sample = st.selectbox(
+            "Select a sample protein:",
+            list(sample_sequences.keys())
+        )
+        
+        st.text_area("Sample sequence:", value=sample_sequences[selected_sample], height=150)
+        
+        if st.button("Use This Sample", key="use_sample_btn", use_container_width=True):
+            st.session_state.protein_sequence = sample_sequences[selected_sample]
+            st.session_state.sequence_analysis = analyze_protein_sequence(sample_sequences[selected_sample])
+            st.rerun()
+    
+    # Display analysis results if available
+    if st.session_state.sequence_analysis:
+        st.markdown("### 🔬 Sequence Analysis Results")
+        
+        analysis = st.session_state.sequence_analysis
+        
+        if 'error' in analysis:
+            st.error(analysis['error'])
+        else:
+            # Create columns for basic properties
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.metric("Length", f"{analysis['sequence_length']} aa")
+            
+            with col2:
+                st.metric("Molecular Weight", f"{analysis['molecular_weight']} kDa")
+            
+            with col3:
+                st.metric("Hydrophobicity", f"{analysis['hydrophobicity']:.3f}")
+            
+            with col4:
+                stability = "Stable" if analysis['is_stable'] else "Unstable"
+                st.metric("Stability", stability, 
+                          delta="Good" if analysis['is_stable'] else "Concern", 
+                          delta_color="normal" if analysis['is_stable'] else "inverse")
+            
+            # Potential issues
+            if analysis['issues']:
+                st.subheader("⚠️ Potential Expression Issues")
+                for issue in analysis['issues']:
+                    st.warning(issue)
+            
+            # Recommendations
+            if analysis['recommendations']:
+                st.subheader("💡 Recommendations")
+                for recommendation in analysis['recommendations']:
+                    st.info(recommendation)
+            
+            # Special properties
+            special_props = []
+            
+            if analysis['has_disulfide_potential']:
+                special_props.append("🔗 Has potential disulfide bonds (" + str(analysis['cysteine_count']) + " cysteines)")
+            
+            if analysis['is_hydrophobic']:
+                special_props.append("💧 Hydrophobic (possible membrane protein)")
+            
+            if special_props:
+                st.subheader("🔍 Special Properties")
+                for prop in special_props:
+                    st.info(prop)
+
+def show_parameters_page():
+    """Display expression parameters configuration page"""
+    username = st.session_state.username
+    
+    if not username or not check_user_access(username, 'parameters'):
+        st.error("🔒 This feature requires a subscription. Please upgrade your account.")
+        return
+    
+    st.markdown("## ⚙️ Expression Parameters Configuration")
+    
+    # Check if vector and host are selected
+    if not st.session_state.selected_vector or not st.session_state.selected_host:
+        st.warning("Please select a vector and host before configuring expression parameters.")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Select Vector", use_container_width=True):
+                st.session_state.page = 'vectors'
+                st.rerun()
+        with col2:
+            if st.button("Select Host", use_container_width=True):
+                st.session_state.page = 'hosts'
+                st.rerun()
+        
+        return
+    
+    # Show current selections
+    st.markdown("### 📋 Current Selections")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown(f"""
+        **Vector:** {st.session_state.selected_vector.name}
+        - Promoter: {st.session_state.selected_vector.promoter}
+        - Selection: {st.session_state.selected_vector.selection_marker}
+        - Tags: {', '.join(st.session_state.selected_vector.tags)}
+        """)
+    
+    with col2:
+        st.markdown(f"""
+        **Host:** {st.session_state.selected_host.strain}
+        - Species: {st.session_state.selected_host.species}
+        - Features: {', '.join(st.session_state.selected_host.features)}
+        """)
+    
+    st.divider()
+    
+    # Parameters configuration
+    st.markdown("### ⚙️ Configure Expression Parameters")
+    
+    # Two columns layout
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        temperature = st.slider(
+            "Temperature (°C)",
+            min_value=16,
+            max_value=37,
+            value=st.session_state.expression_parameters['temperature'],
+            step=1,
+            help="Lower temperatures often result in better folding but slower expression"
+        )
+        
+        induction_time = st.slider(
+            "Induction Time (hours)",
+            min_value=2,
+            max_value=16,
+            value=st.session_state.expression_parameters['induction_time'],
+            step=1,
+            help="Longer induction times may increase yield for well-behaved proteins"
+        )
+        
+        inducer_concentration = st.slider(
+            "Inducer Concentration (mM)",
+            min_value=0.1,
+            max_value=1.0,
+            value=st.session_state.expression_parameters['inducer_concentration'],
+            step=0.1,
+            help="IPTG concentration for T7 or tac promoters, arabinose for pBAD"
+        )
+    
+    with col2:
+        od600 = st.slider(
+            "OD600 at Induction",
+            min_value=0.4,
+            max_value=1.0,
+            value=st.session_state.expression_parameters['OD600_at_induction'],
+            step=0.1,
+            help="Cell density at which to induce protein expression"
+        )
+        
+        media_options = ["LB", "TB", "M9", "2xYT", "SOC"]
+        media = st.selectbox(
+            "Media Composition",
+            options=media_options,
+            index=media_options.index(st.session_state.expression_parameters['media_composition']) 
+            if st.session_state.expression_parameters['media_composition'] in media_options else 0,
+            help="Rich media (TB, 2xYT) gives higher yields; minimal media (M9) allows better control"
+        )
+    
+    # Auto-suggest parameters based on protein properties
+    st.divider()
+    st.markdown("### 🤖 Auto-Suggest Parameters")
+    
+    if st.session_state.sequence_analysis and 'protein_properties' in st.session_state.sequence_analysis:
+        protein_properties = st.session_state.sequence_analysis['protein_properties']
+        
+        if st.button("Suggest Optimal Parameters Based on Protein Properties", use_container_width=True):
+            # Get customized parameters based on protein properties
+            suggested_params = st.session_state.expression_parameters.copy()
+            
+            if protein_properties.get('has_disulfide_bonds', False):
+                suggested_params['temperature'] = 25
+                st.info("🔗 Disulfide bonds detected: Lowered temperature to 25°C")
+            
+            if protein_properties.get('is_membrane_protein', False):
+                suggested_params['temperature'] = 16
+                suggested_params['inducer_concentration'] = 0.2
+                st.info("💧 Membrane protein detected: Lowered temperature and inducer concentration")
+            
+            if protein_properties.get('size', 0) > 70:
+                suggested_params['induction_time'] = 8
+                st.info("📏 Large protein detected: Extended induction time to 8 hours")
+                
+            if protein_properties.get('is_toxic', False):
+                suggested_params['OD600_at_induction'] = 0.8
+                suggested_params['inducer_concentration'] = 0.2
+                st.info("⚠️ Potentially toxic protein: Higher OD and lower inducer concentration")
+            
+            # Rich media generally better for expression
+            suggested_params['media_composition'] = "TB"
+            st.info("🧪 Recommended rich media (TB) for better expression")
+            
+            # Update session state
+            st.session_state.expression_parameters = suggested_params
+            
+            st.success("Parameters updated based on protein analysis!")
+            st.rerun()
+    else:
+        st.info("For parameter suggestions based on protein properties, please analyze your protein sequence first.")
+        
+        if st.button("Go to Sequence Analysis", use_container_width=True):
+            st.session_state.page = 'sequence'
+            st.rerun()
+    
+    # Save parameters
+    if st.button("Save Parameters", type="primary", use_container_width=True):
+        st.session_state.expression_parameters = {
+            'temperature': temperature,
+            'induction_time': induction_time,
+            'inducer_concentration': inducer_concentration,
+            'OD600_at_induction': od600,
+            'media_composition': media
+        }
+        
+        st.success("Expression parameters saved!")
+        
+        # Show next step button
+        if st.button("Proceed to Optimization", use_container_width=True):
+            st.session_state.page = 'optimize'
+            st.rerun()
+
+def show_optimization_page():
+    """Display optimization page"""
+    username = st.session_state.username
+    
+    if not username or not check_user_access(username, 'optimize'):
+        st.error("🔒 This feature requires a subscription. Please upgrade your account.")
+        return
+    
+    st.markdown("## 🎯 Expression Optimization")
+    
+    # Check if all required selections are made
+    if not st.session_state.selected_vector or not st.session_state.selected_host:
+        st.warning("Please select a vector and host before optimization.")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Select Vector", use_container_width=True):
+                st.session_state.page = 'vectors'
+                st.rerun()
+        with col2:
+            if st.button("Select Host", use_container_width=True):
+                st.session_state.page = 'hosts'
+                st.rerun()
+        
+        return
+    
+    # Optimization parameters
+    st.markdown("### 📊 Optimization Parameters")
+    
+    # Show current selections in a table
+    selection_data = [
+        ["Vector", st.session_state.selected_vector.name],
+        ["Host", st.session_state.selected_host.strain],
+        ["Temperature", f"{st.session_state.expression_parameters['temperature']} °C"],
+        ["Induction Time", f"{st.session_state.expression_parameters['induction_time']} hours"],
+        ["Inducer Concentration", f"{st.session_state.expression_parameters['inducer_concentration']} mM"],
+        ["OD600 at Induction", str(st.session_state.expression_parameters['OD600_at_induction'])],
+        ["Media", st.session_state.expression_parameters['media_composition']]
+    ]
+    
+    selection_df = pd.DataFrame(selection_data, columns=["Parameter", "Value"])
+    st.table(selection_df)
+    
+    # Additional optimization settings
+    st.markdown("### ⚙️ Additional Settings")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        n_suggestions = st.slider("Number of Suggestions", min_value=1, max_value=10, value=5)
+    
+    with col2:
+        if st.session_state.sequence_analysis and 'protein_properties' in st.session_state.sequence_analysis:
+            protein_properties = st.session_state.sequence_analysis['protein_properties']
+            
+            is_membrane = st.checkbox("Membrane Protein", 
+                                     value=protein_properties.get('is_membrane_protein', False))
+            has_disulfide = st.checkbox("Contains Disulfide Bonds", 
+                                       value=protein_properties.get('has_disulfide_bonds', False))
+            is_toxic = st.checkbox("Potentially Toxic to Host", 
+                                  value=protein_properties.get('is_toxic', False))
+        else:
+            is_membrane = st.checkbox("Membrane Protein", value=False)
+            has_disulfide = st.checkbox("Contains Disulfide Bonds", value=False)
+            is_toxic = st.checkbox("Potentially Toxic to Host", value=False)
+    
+    # Create protein properties dictionary
+    protein_properties = {
+        'size': 300,  # Default size
+        'has_disulfide_bonds': has_disulfide,
+        'is_membrane_protein': is_membrane,
+        'is_toxic': is_toxic
+    }
+    
+    # If sequence analysis available, use actual properties
+    if st.session_state.sequence_analysis and 'protein_properties' in st.session_state.sequence_analysis:
+        protein_properties['size'] = st.session_state.sequence_analysis['protein_properties'].get('size', 300)
+    
+    # Run optimization
+    if st.button("🚀 Run Optimization", type="primary", use_container_width=True):
+        with st.spinner("Running optimization..."):
+            # Initialize optimizer
+            optimizer = ExpressionOptimizer()
+            optimizer.load_model()
+            
+            # Current conditions
+            current_conditions = {
+                'vector_type': st.session_state.selected_vector.name,
+                'host_strain': st.session_state.selected_host.strain,
+                'temperature': st.session_state.expression_parameters['temperature'],
+                'induction_time': st.session_state.expression_parameters['induction_time'],
+                'inducer_concentration': st.session_state.expression_parameters['inducer_concentration'],
+                'OD600_at_induction': st.session_state.expression_parameters['OD600_at_induction'],
+                'media_composition': st.session_state.expression_parameters['media_composition']
+            }
+            
+            # Predict expression with current conditions
+            current_expression = optimizer.predict_expression(current_conditions)
+            
+            # Get optimization suggestions
+            suggestions = optimizer.suggest_optimal_conditions(
+                vector_name=st.session_state.selected_vector.name,
+                host_strain=st.session_state.selected_host.strain,
+                protein_properties=protein_properties,
+                n_suggestions=n_suggestions
+            )
+            
+            # Store results
+            st.session_state.optimization_results = {
+                'current_conditions': current_conditions,
+                'current_expression': current_expression,
+                'suggestions': suggestions,
+                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'vector': st.session_state.selected_vector.to_dict(),
+                'host': st.session_state.selected_host.to_dict()
+            }
+            
+            # Go to results page
+            st.session_state.page = 'results'
+            st.rerun()
+
+def show_results_page():
+    """Display optimization results page"""
+    username = st.session_state.username
+    
+    if not username or not check_user_access(username, 'results'):
+        st.error("🔒 This feature requires a subscription. Please upgrade your account.")
+        return
+    
+    st.markdown("## 📊 Optimization Results")
+    
+    if not st.session_state.optimization_results:
+        st.warning("No optimization results available. Please run optimization first.")
+        
+        if st.button("Go to Optimization", use_container_width=True):
+            st.session_state.page = 'optimize'
+            st.rerun()
+        
+        return
+    
+    results = st.session_state.optimization_results
+    
+    # Display optimization time
+    st.markdown(f"*Optimization completed at: {results['timestamp']}*")
+    
+    # Current vs Optimal conditions
+    st.markdown("### 📈 Expression Prediction")
+    
+    # Calculate improvement
+    current_expr = results['current_expression']
+    best_suggestion = results['suggestions'][0] if results['suggestions'] else None
+    
+    if best_suggestion:
+        best_expr = best_suggestion['predicted_expression']
+        improvement = best_expr - current_expr
+        improvement_percent = (improvement / current_expr) * 100 if current_expr > 0 else 0
+        
+        # Display metrics
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.metric(
+                "Current Parameters",
+                f"{current_expr:.1f}%",
+                help="Predicted expression with your selected parameters"
+            )
+        
+        with col2:
+            st.metric(
+                "Optimal Parameters",
+                f"{best_expr:.1f}%",
+                delta=f"+{improvement:.1f}%",
+                help="Predicted expression with optimized parameters"
+            )
+        
+        with col3:
+            st.metric(
+                "Improvement",
+                f"{improvement_percent:.1f}%",
+                help="Percentage improvement over current parameters"
+            )
+        
+        # Create visualization
+        st.markdown("### 📊 Visualization of Results")
+        
+        # Prepare data for chart
+        expressions = [results['current_expression']] + [s['predicted_expression'] for s in results['suggestions']]
+        labels = ['Current'] + [f'Option {i+1}' for i in range(len(results['suggestions']))]
+        
+        # Create bar chart
+        fig = go.Figure(data=[
+            go.Bar(
+                x=labels,
+                y=expressions,
+                marker_color=['#1976d2'] + ['#4caf50'] * len(results['suggestions']),
+                text=[f"{e:.1f}%" for e in expressions],
+                textposition='auto'
+            )
+        ])
+        
+        fig.update_layout(
+            title="Predicted Expression Levels",
+            xaxis_title="Parameters",
+            yaxis_title="Predicted Expression (%)",
+            yaxis_range=[0, max(expressions) * 1.1],
+            height=400
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Display suggested conditions
+        st.markdown("### 💡 Suggested Expression Conditions")
+        
+        # Create tabs for different suggestions
+        suggestion_tabs = st.tabs([f"Option {i+1}" for i in range(len(results['suggestions']))])
+        
+        for i, (tab, suggestion) in enumerate(zip(suggestion_tabs, results['suggestions'])):
+            with tab:
+                params = suggestion['parameters']
+                
+                # Create two columns
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown("#### 🧪 Expression Parameters")
+                    
+                    st.markdown(f"""
+                    - **Vector:** {params['vector_type']}
+                    - **Host:** {params['host_strain']}
+                    - **Temperature:** {params['temperature']} °C
+                    - **Induction Time:** {params['induction_time']} hours
+                    - **Inducer Concentration:** {params['inducer_concentration']} mM
+                    - **OD600 at Induction:** {params['OD600_at_induction']}
+                    - **Media:** {params['media_composition']}
+                    """)
+                
+                with col2:
+                    st.markdown("#### 📊 Predicted Performance")
+                    
+                    st.markdown(f"""
+                    - **Predicted Expression:** {suggestion['predicted_expression']:.1f}%
+                    - **Improvement:** {(suggestion['predicted_expression'] - current_expr):.1f}%
+                    """)
+                    
+                    if 'additives' in suggestion and suggestion['additives']:
+                        st.markdown("#### 🧬 Recommended Additives")
+                        
+                        for additive in suggestion['additives']:
+                            st.info(additive)
+        
+        # Generate expression protocol
+        st.markdown("### 📋 Expression Protocol")
+        
+        # Use the best suggestion for the protocol
+        best_params = best_suggestion['parameters']
+        
+        # Create protocol text
+        protocol = f"""
+        # Optimized Expression Protocol for {results['vector']['name']} in {results['host']['strain']}
+        
+        ## Materials
+        
+        - {results['host']['strain']} competent cells
+        - {results['vector']['name']} vector containing your gene of interest
+        - {best_params['media_composition']} medium
+        - {results['vector']['selection_marker']} antibiotic
+        - Inducer: {"IPTG" if best_params['vector_type'].startswith(('pET', 'pGEX', 'pMAL')) else "Arabinose"}
+        - Sterile culture flasks
+        - Incubator with shaking capability
+        
+        ## Procedure
+        
+        1. **Transformation**
+           - Transform {results['host']['strain']} cells with your {results['vector']['name']} construct
+           - Plate on {results['vector']['selection_marker']} agar and incubate overnight at 37°C
+        
+        2. **Starter Culture**
+           - Pick a single colony and inoculate 5 mL {best_params['media_composition']} medium with {results['vector']['selection_marker']}
+           - Incubate overnight at 37°C with shaking (200 rpm)
+        
+        3. **Expression Culture**
+           - Dilute the starter culture 1:100 into fresh {best_params['media_composition']} with {results['vector']['selection_marker']}
+           - Grow at 37°C with shaking until OD600 reaches {best_params['OD600_at_induction']}
+        
+        4. **Induction**
+           - Add {"IPTG" if best_params['vector_type'].startswith(('pET', 'pGEX', 'pMAL')) else "Arabinose"} to a final concentration of {best_params['inducer_concentration']} mM
+           - Continue incubation at {best_params['temperature']}°C for {best_params['induction_time']} hours
+        
+        5. **Harvesting**
+           - Collect cells by centrifugation at 4,000g for 15 minutes at 4°C
+           - Discard supernatant and freeze cell pellet at -20°C or proceed directly to lysis
+        
+        6. **Cell Lysis**
+           - Resuspend the cell pellet in lysis buffer appropriate for your purification method
+           - Lyse cells by sonication or other preferred method
+           - Clarify lysate by centrifugation at 15,000g for 30 minutes at 4°C
+        
+        7. **Purification**
+           - Proceed with purification appropriate for your tag and protein
+        """
+        
+        # Display protocol in a code block
+        st.code(protocol, language="markdown")
+        
+        # Download button for protocol
+        protocol_download = protocol.replace('#', '').strip()
+        
+        st.download_button(
+            label="📄 Download Protocol as Text",
+            data=protocol_download,
+            file_name=f"expression_protocol_{datetime.now().strftime('%Y%m%d')}.txt",
+            mime="text/plain",
+            use_container_width=True
+        )
+        
+        # Option to save results
+        if st.button("💾 Save Results to File", use_container_width=True):
+            # Save results to JSON
+            results_file = f"results/optimization_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            
+            # Prepare results for saving
+            save_results = {
+                'current_conditions': results['current_conditions'],
+                'current_expression': float(results['current_expression']),
+                'suggestions': [{
+                    'parameters': s['parameters'],
+                    'predicted_expression': float(s['predicted_expression']),
+                    'additives': s.get('additives', [])
+                } for s in results['suggestions']],
+                'timestamp': results['timestamp'],
+                'vector': results['vector'],
+                'host': results['host']
+            }
+            
+            # Save to file
+            with open(results_file, 'w') as f:
+                json.dump(save_results, f, indent=2)
+            
+            st.success(f"Results saved to {results_file}")
+
 def show_restricted_feature(feature_name):
-    """Show message for restricted features (CORRIGÉ)"""
+    """Show message for restricted features"""
     st.error(f"🔒 {feature_name} requires a subscription. Please upgrade your account.")
     
     col1, col2, col3 = st.columns(3)
@@ -1076,15 +1608,17 @@ def show_restricted_feature(feature_name):
             st.rerun()
     
     with col2:
-        if st.button("🆓 Start Free Trial", use_container_width=True):
-            st.session_state.show_signup = True
+        if st.button("🎮 Demo Login", use_container_width=True):
+            st.session_state.authenticated = True
+            st.session_state.username = 'admin'
+            st.session_state.user_name = 'Administrator'
             st.rerun()
     
     with col3:
         st.link_button("🛒 Buy NeoRen Product", NEOREN_WEBSITE, use_container_width=True)
 
 # ----------------------
-# Main Application (CORRIGÉ)
+# Main Application
 # ----------------------
 
 def main():
@@ -1111,13 +1645,6 @@ def main():
     show_navigation()
     
     # Handle authentication flows
-    if st.session_state.show_signup:
-        show_signup_form()
-        if st.button("← Back to Home"):
-            st.session_state.show_signup = False
-            st.rerun()
-        return
-    
     if st.session_state.show_login:
         show_login_form()
         if st.button("← Back to Home"):
@@ -1132,35 +1659,19 @@ def main():
     if current_page == 'home':
         show_home_page()
     elif current_page == 'dashboard':
-        show_user_dashboard()
+        show_dashboard()
     elif current_page == 'vectors':
         show_vectors_page()
     elif current_page == 'hosts':
         show_hosts_page()
     elif current_page == 'sequence':
-        if st.session_state.authenticated and check_user_access(username, 'sequence'):
-            st.markdown("## 🔬 Protein Sequence Analysis")
-            st.info("Sequence analysis functionality will be implemented here.")
-        else:
-            show_restricted_feature("Sequence Analysis")
+        show_sequence_page()
     elif current_page == 'parameters':
-        if st.session_state.authenticated and check_user_access(username, 'parameters'):
-            st.markdown("## ⚙️ Expression Parameters Configuration")
-            st.info("Parameters configuration functionality will be implemented here.")
-        else:
-            show_restricted_feature("Parameters Configuration")
+        show_parameters_page()
     elif current_page == 'optimize':
-        if st.session_state.authenticated and check_user_access(username, 'optimize'):
-            st.markdown("## 🎯 Expression Optimization")
-            st.info("Optimization functionality will be implemented here.")
-        else:
-            show_restricted_feature("Expression Optimization")
+        show_optimization_page()
     elif current_page == 'results':
-        if st.session_state.authenticated and check_user_access(username, 'results'):
-            st.markdown("## 📊 Optimization Results")
-            st.info("Results visualization functionality will be implemented here.")
-        else:
-            show_restricted_feature("Results Visualization")
+        show_results_page()
 
 # Run the application
 if __name__ == "__main__":
