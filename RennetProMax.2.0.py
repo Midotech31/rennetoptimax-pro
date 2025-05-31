@@ -1,7 +1,7 @@
-﻿# RennetOptiMax_Pro_Enhanced.py - Comprehensive Protein Expression Optimization Platform
+﻿# RennetOptiMax_Pro_Final.py - Version Finale
 # -------------------------------------------------------------------
-# Run with: streamlit run RennetOptiMax_Pro_Enhanced.py
-# Requirements: pip install streamlit pandas numpy scikit-learn plotly joblib biopython streamlit-authenticator
+# Run with: streamlit run RennetOptiMax_Pro_Final.py
+# Requirements: pip install streamlit pandas numpy scikit-learn plotly joblib biopython streamlit-authenticator==0.2.3
 
 import streamlit as st
 import pandas as pd
@@ -24,8 +24,6 @@ from datetime import datetime, timedelta
 import joblib
 import io
 import re
-from Bio import SeqIO
-from Bio.SeqUtils.ProtParam import ProteinAnalysis
 import hashlib
 import uuid
 
@@ -44,8 +42,16 @@ os.makedirs('results', exist_ok=True)
 os.makedirs('users', exist_ok=True)
 
 # ----------------------
-# Authentication Configuration
+# Authentication Configuration (CORRIGÉ)
 # ----------------------
+
+def hash_password(password):
+    """Hash a password using SHA256"""
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def verify_password(password, hashed_password):
+    """Verify a password against its hash"""
+    return hash_password(password) == hashed_password
 
 def create_default_auth_config():
     """Create default authentication configuration"""
@@ -55,7 +61,7 @@ def create_default_auth_config():
                 'admin': {
                     'email': 'admin@rennetoptimax.com',
                     'name': 'Administrator',
-                    'password': '$2b$12$XcUMHB.QGJ8MKY.Hf9m8Yung7cHJ3ZlY1J9oX.zVm4N2aX8hJ0nCu',  # hashed: admin123
+                    'password': hash_password('admin123'),
                     'user_type': 'admin',
                     'subscription_status': 'lifetime',
                     'subscription_expiry': None,
@@ -68,7 +74,7 @@ def create_default_auth_config():
                 'demo_student': {
                     'email': 'student@example.com',
                     'name': 'Demo Student',
-                    'password': '$2b$12$XcUMHB.QGJ8MKY.Hf9m8Yung7cHJ3ZlY1J9oX.zVm4N2aX8hJ0nCu',  # hashed: student123
+                    'password': hash_password('student123'),
                     'user_type': 'student',
                     'subscription_status': 'trial',
                     'subscription_expiry': (datetime.now() + timedelta(days=30)).isoformat(),
@@ -84,9 +90,6 @@ def create_default_auth_config():
             'name': 'rennet_auth_cookie',
             'key': 'random_signature_key_123456789',
             'expiry_days': 30
-        },
-        'preauthorized': {
-            'emails': []
         }
     }
     return config
@@ -116,7 +119,7 @@ def add_new_user(username, email, name, password, user_type='professional'):
     config = load_auth_config()
     
     # Hash the password
-    hashed_password = stauth.Hasher([password]).generate()[0]
+    hashed_password = hash_password(password)
     
     # Create new user data
     new_user = {
@@ -136,6 +139,17 @@ def add_new_user(username, email, name, password, user_type='professional'):
     config['credentials']['usernames'][username] = new_user
     save_auth_config(config)
     return True
+
+def authenticate_user(username, password):
+    """Authenticate a user"""
+    config = load_auth_config()
+    users = config['credentials']['usernames']
+    
+    if username in users:
+        user_data = users[username]
+        if verify_password(password, user_data['password']):
+            return True, user_data['name']
+    return False, None
 
 def check_user_access(username, feature):
     """Check if user has access to a specific feature"""
@@ -191,8 +205,11 @@ PRICING_PLANS = {
     }
 }
 
+# NeoRen Product Link
+NEOREN_WEBSITE = "https://neoren.mystrikingly.com/"
+
 # ----------------------
-# Data Classes & Models (Previous code remains the same)
+# Data Classes & Models
 # ----------------------
 
 class Vector:
@@ -356,7 +373,7 @@ class ExpressionOptimizer:
             return 50.0
 
 # ----------------------
-# Database Functions (Previous code remains the same but shortened for space)
+# Database Functions
 # ----------------------
 
 def load_vectors():
@@ -368,14 +385,25 @@ def load_vectors():
             vector_data = json.load(f)
             vectors = [Vector(**v) for v in vector_data]
     else:
-        # Create default vectors (shortened for space)
         vectors = [
             Vector(1, "pET21a", 5443, "T7", "T7", "pBR322", "Ampicillin", ["His-tag", "C-terminal"],
                    "High-level expression vector with C-terminal His-tag",
                    {"cloning_sites": ["NdeI", "XhoI", "BamHI", "EcoRI"], "tag_location": "C-terminal", "induction": "IPTG"}),
             Vector(2, "pET28a", 5369, "T7", "T7", "pBR322", "Kanamycin", ["His-tag", "N-terminal", "T7-tag"],
                    "High-level expression vector with N-terminal His-tag",
-                   {"cloning_sites": ["NdeI", "XhoI", "BamHI", "EcoRI"], "tag_location": "N-terminal", "induction": "IPTG"})
+                   {"cloning_sites": ["NdeI", "XhoI", "BamHI", "EcoRI"], "tag_location": "N-terminal", "induction": "IPTG"}),
+            Vector(3, "pET22b", 5493, "T7", "T7", "pBR322", "Ampicillin", ["His-tag", "C-terminal", "pelB"],
+                   "Periplasmic expression vector with pelB signal sequence",
+                   {"cloning_sites": ["NdeI", "XhoI", "BamHI", "EcoRI"], "tag_location": "C-terminal", "induction": "IPTG", "secretion": "periplasmic"}),
+            Vector(4, "pBAD", 4102, "araBAD", "rrnB", "pBR322", "Ampicillin", ["His-tag", "C-terminal"],
+                   "Arabinose-inducible expression vector",
+                   {"cloning_sites": ["NcoI", "HindIII", "XhoI"], "tag_location": "C-terminal", "induction": "Arabinose"}),
+            Vector(5, "pMAL-c5X", 5677, "tac", "lambda t0", "pBR322", "Ampicillin", ["MBP", "N-terminal"],
+                   "MBP fusion vector for improved solubility",
+                   {"cloning_sites": ["NdeI", "EcoRI", "BamHI", "SalI"], "tag_location": "N-terminal", "induction": "IPTG", "purification": "Amylose resin"}),
+            Vector(6, "pGEX-6P-1", 4984, "tac", "lambda t0", "pBR322", "Ampicillin", ["GST", "N-terminal"],
+                   "GST fusion vector for improved solubility",
+                   {"cloning_sites": ["BamHI", "EcoRI", "SalI", "NotI"], "tag_location": "N-terminal", "induction": "IPTG", "protease_site": "PreScission"})
         ]
         save_vectors(vectors)
         
@@ -396,14 +424,25 @@ def load_hosts():
             host_data = json.load(f)
             hosts = [Host(**h) for h in host_data]
     else:
-        # Create default hosts (shortened for space)
         hosts = [
             Host(1, "BL21(DE3)", "E. coli", "F– ompT gal dcm lon hsdSB(rB–mB–) λ(DE3 [lacI lacUV5-T7p07 ind1 sam7 nin5]) [malB+]K-12(λS)",
                  "Standard expression strain with T7 RNA polymerase", ["T7 expression", "Protease deficient", "General purpose"],
                  ["Not suitable for toxic proteins", "No rare codon support"]),
             Host(2, "Rosetta(DE3)", "E. coli", "F- ompT hsdSB(rB- mB-) gal dcm (DE3) pRARE (CamR)",
                  "Enhanced expression of proteins containing rare codons", ["T7 expression", "Rare codon optimization", "Protease deficient"],
-                 ["Additional antibiotic (chloramphenicol) required"])
+                 ["Additional antibiotic (chloramphenicol) required"]),
+            Host(3, "BL21(DE3)pLysS", "E. coli", "F– ompT gal dcm lon hsdSB(rB–mB–) λ(DE3) pLysS(cmR)",
+                 "Reduced basal expression, good for toxic proteins", ["T7 expression", "Reduced leaky expression", "Toxic protein compatible"],
+                 ["Lower overall expression", "Additional antibiotic required"]),
+            Host(4, "C41(DE3)", "E. coli", "F– ompT gal dcm hsdSB(rB- mB-) (DE3)",
+                 "Optimized for membrane proteins and toxic proteins", ["Membrane protein expression", "Toxic protein compatible", "T7 expression"],
+                 ["Lower expression of soluble proteins"]),
+            Host(5, "SHuffle T7", "E. coli", "F´ lac, pro, lacIQ / Δ(ara-leu)7697 araD139 fhuA2 lacZ::T7 gene1 Δ(phoA)PvuII phoR ahpC* galE (or U) galK λatt::pNEB3-r1-cDsbC (SpecR, lacIq) ΔtrxB rpsL150(StrR) Δgor Δ(malF)3",
+                 "Enhanced disulfide bond formation in cytoplasm", ["Disulfide bond formation", "T7 expression", "Oxidizing cytoplasmic environment"],
+                 ["Slower growth", "Lower overall yield"]),
+            Host(6, "ArcticExpress(DE3)", "E. coli", "E. coli B F– ompT hsdS(rB– mB–) dcm+ Tetr gal λ(DE3) endA Hte [cpn10 cpn60 Gentr]",
+                 "Cold-adapted chaperonins for low temperature expression", ["Low temperature expression", "Cold-adapted chaperones", "T7 expression"],
+                 ["Gentamicin resistance", "Slower growth"])
         ]
         save_hosts(hosts)
         
@@ -416,28 +455,27 @@ def save_hosts(hosts):
         json.dump(host_data, f, indent=2)
 
 # ----------------------
-# UI Components
+# UI Components (CORRIGÉS)
 # ----------------------
 
 def init_session_state():
     """Initialize session state variables"""
     if 'page' not in st.session_state:
         st.session_state.page = 'home'
+    if 'authenticated' not in st.session_state:
+        st.session_state.authenticated = False
+    if 'username' not in st.session_state:
+        st.session_state.username = None
+    if 'user_name' not in st.session_state:
+        st.session_state.user_name = None
     if 'selected_vector' not in st.session_state:
         st.session_state.selected_vector = None
     if 'selected_host' not in st.session_state:
         st.session_state.selected_host = None
-    if 'expression_parameters' not in st.session_state:
-        st.session_state.expression_parameters = {
-            'temperature': 30, 'induction_time': 4, 'inducer_concentration': 0.5,
-            'OD600_at_induction': 0.6, 'media_composition': 'LB'
-        }
-    if 'protein_sequence' not in st.session_state:
-        st.session_state.protein_sequence = ""
-    if 'sequence_analysis' not in st.session_state:
-        st.session_state.sequence_analysis = None
-    if 'optimization_results' not in st.session_state:
-        st.session_state.optimization_results = None
+    if 'show_signup' not in st.session_state:
+        st.session_state.show_signup = False
+    if 'show_login' not in st.session_state:
+        st.session_state.show_login = False
 
 def show_header():
     """Display the application header"""
@@ -451,14 +489,14 @@ def show_header():
         st.markdown("### 🧬 AI-Powered Protein Expression Optimization Platform")
     
     with col3:
-        if st.session_state.get("authentication_status"):
+        if st.session_state.authenticated:
             if st.button("🏠 Dashboard", key="dashboard_btn"):
                 st.session_state.page = 'dashboard'
-                st.experimental_rerun()
+                st.rerun()
 
 def show_product_banner():
-    """Display product promotion banner"""
-    st.markdown("""
+    """Display product promotion banner with NeoRen link"""
+    st.markdown(f"""
     <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
                 color: white; 
                 padding: 30px; 
@@ -469,15 +507,16 @@ def show_product_banner():
         <h3>Premium Sustainable Rennet for Modern Cheese Production</h3>
         <p>✅ 100% Animal-Free • ✅ Superior Performance • ✅ Cost-Effective & Scalable</p>
         <div style="margin: 20px 0;">
-            <button style="background: #ff6b6b; 
+            <a href="{NEOREN_WEBSITE}" target="_blank" style="background: #ff6b6b; 
                           color: white; 
                           border: none; 
                           padding: 15px 30px; 
                           border-radius: 5px; 
                           font-size: 18px; 
-                          cursor: pointer;">
+                          text-decoration: none;
+                          display: inline-block;">
                 🛒 Buy 500g & Get 1 Year Free Access
-            </button>
+            </a>
         </div>
         <p><small>Sustainable rennet production through advanced genetic engineering</small></p>
     </div>
@@ -501,9 +540,9 @@ def show_access_plans():
     # Referral Rewards
     with st.expander("🔗 Referral Reward Program"):
         st.markdown("**Share your referral link and earn rewards!**")
-        if st.session_state.get("authentication_status"):
+        if st.session_state.authenticated:
             config = load_auth_config()
-            username = st.session_state["username"]
+            username = st.session_state.username
             referral_code = config['credentials']['usernames'][username]['referral_code']
             st.code(f"Your Referral Code: {referral_code}")
             st.markdown("**🎁 If 1 person buys via your link → 6 months free access**")
@@ -516,6 +555,20 @@ def show_access_plans():
         st.markdown("- Premium sustainable rennet")
         st.markdown("- Immediate platform access")
         st.markdown("- Technical support included")
+        
+        # Link to NeoRen website
+        st.markdown(f"""
+        <div style="text-align: center; margin: 20px 0;">
+            <a href="{NEOREN_WEBSITE}" target="_blank" style="background: #4CAF50; 
+                      color: white; 
+                      padding: 10px 20px; 
+                      border-radius: 5px; 
+                      text-decoration: none; 
+                      display: inline-block;">
+                🌐 Visit NeoRen Website
+            </a>
+        </div>
+        """, unsafe_allow_html=True)
     
     # Subscription Plans
     with st.expander("💳 Subscription Plans (Post-Trial)"):
@@ -539,7 +592,7 @@ def show_access_plans():
         st.markdown("- Exclusive benefits for power users")
 
 def show_signup_form():
-    """Display user registration form"""
+    """Display user registration form (CORRIGÉ)"""
     st.markdown("## 📝 Create Your Account")
     
     with st.form("signup_form"):
@@ -575,18 +628,52 @@ def show_signup_form():
                         st.balloons()
                         if st.button("Go to Login"):
                             st.session_state.show_signup = False
-                            st.experimental_rerun()
+                            st.rerun()
                 except Exception as e:
                     st.error(f"Error creating account: {e}")
 
+def show_login_form():
+    """Display login form (CORRIGÉ)"""
+    st.markdown("## 🔐 Login to Your Account")
+    
+    with st.form("login_form"):
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            login_button = st.form_submit_button("🔐 Login", use_container_width=True, type="primary")
+        
+        with col2:
+            forgot_password = st.form_submit_button("🔑 Forgot Password?", use_container_width=True)
+        
+        if login_button:
+            if username and password:
+                authenticated, user_name = authenticate_user(username, password)
+                if authenticated:
+                    st.session_state.authenticated = True
+                    st.session_state.username = username
+                    st.session_state.user_name = user_name
+                    st.session_state.show_login = False
+                    st.success(f"Welcome back, {user_name}!")
+                    st.rerun()
+                else:
+                    st.error("Invalid username or password")
+            else:
+                st.error("Please enter both username and password")
+        
+        if forgot_password:
+            st.info("Password reset functionality would be implemented here")
+
 def show_user_dashboard():
-    """Display user dashboard"""
-    if not st.session_state.get("authentication_status"):
+    """Display user dashboard (CORRIGÉ)"""
+    if not st.session_state.authenticated:
         st.error("Please login to access the dashboard.")
         return
     
     config = load_auth_config()
-    username = st.session_state["username"]
+    username = st.session_state.username
     user_data = config['credentials']['usernames'][username]
     
     st.markdown(f"## 👋 Welcome, {user_data['name']}!")
@@ -629,27 +716,31 @@ def show_user_dashboard():
         if st.button("📱 Share on Social"):
             st.info("Social sharing functionality would be implemented here")
     
-    # Subscription Management
-    st.markdown("### 💳 Subscription Management")
+    # Product Purchase Section
+    st.markdown("### 🛒 NeoRen Product Purchase")
     
-    if user_data['subscription_status'] == 'trial':
-        st.info("You're currently on a free trial. Upgrade to continue using all features after trial expires.")
-        
-        user_type = st.selectbox("Select Plan Type", ["student", "academic", "professional"], 
-                                index=["student", "academic", "professional"].index(user_data['user_type']))
-        
-        plan_duration = st.selectbox("Select Duration", ["1_month", "6_months", "1_year"])
-        
-        price = PRICING_PLANS[user_type][plan_duration]
-        st.markdown(f"**Price: ${price}**")
-        
-        if st.button("💳 Upgrade Subscription"):
-            st.success("Subscription upgrade functionality would be implemented here with payment gateway integration.")
+    col1, col2 = st.columns([2, 1])
     
-    elif user_data['subscription_status'] == 'active':
-        st.success("Your subscription is active!")
-        if st.button("🔄 Renew Subscription"):
-            st.info("Subscription renewal functionality would be implemented here.")
+    with col1:
+        st.markdown("**Get 1 year of full access by purchasing our NeoRen Chymosin Powder (500g)**")
+        st.markdown("- Premium sustainable rennet for cheese production")
+        st.markdown("- 100% animal-free and environmentally friendly")
+        st.markdown("- Immediate access to all platform features")
+    
+    with col2:
+        st.markdown(f"""
+        <div style="text-align: center;">
+            <a href="{NEOREN_WEBSITE}" target="_blank" style="background: #ff6b6b; 
+                      color: white; 
+                      padding: 15px 25px; 
+                      border-radius: 5px; 
+                      text-decoration: none; 
+                      display: inline-block;
+                      font-weight: bold;">
+                🛒 Buy NeoRen Product
+            </a>
+        </div>
+        """, unsafe_allow_html=True)
     
     # Quick Actions
     st.markdown("### ⚡ Quick Actions")
@@ -659,25 +750,25 @@ def show_user_dashboard():
     with col1:
         if st.button("🧬 Start Optimization", use_container_width=True):
             st.session_state.page = 'vectors'
-            st.experimental_rerun()
+            st.rerun()
     
     with col2:
         if st.button("📊 View Results", use_container_width=True):
             st.session_state.page = 'results'
-            st.experimental_rerun()
+            st.rerun()
     
     with col3:
         if st.button("❓ Get Support", use_container_width=True):
             st.info("Support functionality would be implemented here.")
 
 def show_navigation():
-    """Display navigation sidebar"""
+    """Display navigation sidebar (CORRIGÉ)"""
     st.sidebar.title("🧬 RennetOptiMax Pro")
     
     # Authentication status
-    if st.session_state.get("authentication_status"):
+    if st.session_state.authenticated:
         config = load_auth_config()
-        username = st.session_state["username"]
+        username = st.session_state.username
         user_data = config['credentials']['usernames'][username]
         
         st.sidebar.success(f"👋 Welcome, {user_data['name']}")
@@ -712,7 +803,7 @@ def show_navigation():
             if st.sidebar.button(page_name, key=f"nav_{page_id}", use_container_width=True,
                                 type="primary" if st.session_state.page == page_id else "secondary"):
                 st.session_state.page = page_id
-                st.experimental_rerun()
+                st.rerun()
         
         # Account management
         st.sidebar.divider()
@@ -720,20 +811,21 @@ def show_navigation():
         
         if st.sidebar.button("⚙️ Account Settings", use_container_width=True):
             st.session_state.page = 'dashboard'
-            st.experimental_rerun()
+            st.rerun()
         
         # Logout
         if st.sidebar.button("🚪 Logout", use_container_width=True):
-            for key in list(st.session_state.keys()):
-                if key.startswith(('authentication', 'name', 'username')):
-                    del st.session_state[key]
-            st.experimental_rerun()
+            st.session_state.authenticated = False
+            st.session_state.username = None
+            st.session_state.user_name = None
+            st.session_state.page = 'home'
+            st.rerun()
     
     else:
         # Not authenticated - show only home
         if st.sidebar.button("🌟 Home", use_container_width=True):
             st.session_state.page = 'home'
-            st.experimental_rerun()
+            st.rerun()
     
     # About section
     st.sidebar.divider()
@@ -742,10 +834,26 @@ def show_navigation():
         "RennetOptiMax Pro: AI-powered protein expression optimization "
         "for sustainable rennet production."
     )
+    
+    # Link to NeoRen website in sidebar
+    st.sidebar.markdown(f"""
+    <div style="text-align: center; margin: 10px 0;">
+        <a href="{NEOREN_WEBSITE}" target="_blank" style="background: #4CAF50; 
+                  color: white; 
+                  padding: 8px 16px; 
+                  border-radius: 5px; 
+                  text-decoration: none; 
+                  display: inline-block;
+                  font-size: 12px;">
+            🌐 Visit NeoRen
+        </a>
+    </div>
+    """, unsafe_allow_html=True)
+    
     st.sidebar.caption("Version 2.0.0 | © 2025 NeoRen")
 
 def show_home_page():
-    """Display enhanced home page"""
+    """Display enhanced home page (CORRIGÉ)"""
     st.markdown("## 🌟 Welcome to RennetOptiMax Pro")
     
     # Product Banner
@@ -809,24 +917,31 @@ def show_home_page():
     with col1:
         if st.button("🆓 Start Free Trial", use_container_width=True, type="primary"):
             st.session_state.show_signup = True
-            st.experimental_rerun()
+            st.rerun()
     
     with col2:
         if st.button("🔑 Login", use_container_width=True):
             st.session_state.show_login = True
-            st.experimental_rerun()
+            st.rerun()
     
     with col3:
-        if st.button("🛒 Buy Product + Access", use_container_width=True):
-            st.info("Redirecting to product purchase page...")
+        st.link_button("🛒 Buy Product + Access", NEOREN_WEBSITE, use_container_width=True)
 
 def show_vectors_page():
-    """Display vector selection page with access control"""
-    username = st.session_state.get("username")
+    """Display vector selection page with access control (CORRIGÉ)"""
+    username = st.session_state.username
     
     if not username or not check_user_access(username, 'vectors'):
         st.error("🔒 This feature requires a subscription. Please upgrade your account.")
         st.info("You can access this feature with any subscription plan or during your free trial.")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🚀 Upgrade Now", use_container_width=True, type="primary"):
+                st.session_state.page = 'dashboard'
+                st.rerun()
+        with col2:
+            st.link_button("🛒 Buy NeoRen Product", NEOREN_WEBSITE, use_container_width=True)
         return
     
     st.markdown("## 🧬 Expression Vector Selection")
@@ -871,38 +986,47 @@ def show_vectors_page():
             cols = st.columns(3)
             
             for j, vector in enumerate(row_vectors):
-                with cols[j]:
-                    selected = st.session_state.selected_vector and st.session_state.selected_vector.id == vector.id
-                    
-                    st.markdown(f"""
-                    <div style="border: {'2px solid #1976d2' if selected else '1px solid #e0e0e0'}; 
-                                border-radius: 10px; 
-                                padding: 15px; 
-                                height: 300px;
-                                background-color: {'#f9f9f9' if selected else 'white'}">
-                        <h4 style="color: {'#1976d2' if selected else 'black'}; margin-top: 0;">{vector.name}</h4>
-                        <p><b>Size:</b> {vector.size} bp</p>
-                        <p><b>Promoter:</b> {vector.promoter}</p>
-                        <p><b>Selection:</b> {vector.selection_marker}</p>
-                        <p><b>Tags:</b> {', '.join(vector.tags)}</p>
-                        <p><b>Description:</b> {vector.description}</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    btn_label = "✅ Selected" if selected else "Select Vector"
-                    if st.button(btn_label, key=f"select_vector_{vector.id}",
-                                use_container_width=True,
-                                type="primary" if selected else "secondary"):
-                        st.session_state.selected_vector = vector
-                        st.experimental_rerun()
+                if j < len(cols):
+                    with cols[j]:
+                        selected = st.session_state.selected_vector and st.session_state.selected_vector.id == vector.id
+                        
+                        st.markdown(f"""
+                        <div style="border: {'2px solid #1976d2' if selected else '1px solid #e0e0e0'}; 
+                                    border-radius: 10px; 
+                                    padding: 15px; 
+                                    height: 300px;
+                                    background-color: {'#f9f9f9' if selected else 'white'}">
+                            <h4 style="color: {'#1976d2' if selected else 'black'}; margin-top: 0;">{vector.name}</h4>
+                            <p><b>Size:</b> {vector.size} bp</p>
+                            <p><b>Promoter:</b> {vector.promoter}</p>
+                            <p><b>Selection:</b> {vector.selection_marker}</p>
+                            <p><b>Tags:</b> {', '.join(vector.tags)}</p>
+                            <p><b>Description:</b> {vector.description}</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        btn_label = "✅ Selected" if selected else "Select Vector"
+                        if st.button(btn_label, key=f"select_vector_{vector.id}",
+                                    use_container_width=True,
+                                    type="primary" if selected else "secondary"):
+                            st.session_state.selected_vector = vector
+                            st.rerun()
 
 def show_hosts_page():
-    """Display host selection page with access control"""
-    username = st.session_state.get("username")
+    """Display host selection page with access control (CORRIGÉ)"""
+    username = st.session_state.username
     
     if not username or not check_user_access(username, 'hosts'):
         st.error("🔒 This feature requires a subscription. Please upgrade your account.")
         st.info("You can access this feature with any subscription plan or during your free trial.")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🚀 Upgrade Now", use_container_width=True, type="primary"):
+                st.session_state.page = 'dashboard'
+                st.rerun()
+        with col2:
+            st.link_button("🛒 Buy NeoRen Product", NEOREN_WEBSITE, use_container_width=True)
         return
     
     st.markdown("## 🦠 Host Strain Selection")
@@ -910,7 +1034,6 @@ def show_hosts_page():
     # Load host database
     hosts = load_hosts()
     
-    # Similar implementation as vectors page...
     st.markdown("### 🦠 Available Host Strains")
     
     for i in range(0, len(hosts), 2):
@@ -918,46 +1041,50 @@ def show_hosts_page():
         cols = st.columns(2)
         
         for j, host in enumerate(row_hosts):
-            with cols[j]:
-                selected = st.session_state.selected_host and st.session_state.selected_host.id == host.id
-                
-                st.markdown(f"""
-                <div style="border: {'2px solid #1976d2' if selected else '1px solid #e0e0e0'}; 
-                            border-radius: 10px; 
-                            padding: 15px; 
-                            background-color: {'#f9f9f9' if selected else 'white'}">
-                    <h4 style="color: {'#1976d2' if selected else 'black'}; margin-top: 0;">{host.strain}</h4>
-                    <p><b>Species:</b> {host.species}</p>
-                    <p><b>Description:</b> {host.description}</p>
-                    <p><b>Features:</b> {', '.join(host.features)}</p>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                btn_label = "✅ Selected" if selected else "Select Host"
-                if st.button(btn_label, key=f"select_host_{host.id}",
-                            use_container_width=True,
-                            type="primary" if selected else "secondary"):
-                    st.session_state.selected_host = host
-                    st.experimental_rerun()
+            if j < len(cols):
+                with cols[j]:
+                    selected = st.session_state.selected_host and st.session_state.selected_host.id == host.id
+                    
+                    st.markdown(f"""
+                    <div style="border: {'2px solid #1976d2' if selected else '1px solid #e0e0e0'}; 
+                                border-radius: 10px; 
+                                padding: 15px; 
+                                background-color: {'#f9f9f9' if selected else 'white'}">
+                        <h4 style="color: {'#1976d2' if selected else 'black'}; margin-top: 0;">{host.strain}</h4>
+                        <p><b>Species:</b> {host.species}</p>
+                        <p><b>Description:</b> {host.description}</p>
+                        <p><b>Features:</b> {', '.join(host.features)}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    btn_label = "✅ Selected" if selected else "Select Host"
+                    if st.button(btn_label, key=f"select_host_{host.id}",
+                                use_container_width=True,
+                                type="primary" if selected else "secondary"):
+                        st.session_state.selected_host = host
+                        st.rerun()
 
 def show_restricted_feature(feature_name):
-    """Show message for restricted features"""
+    """Show message for restricted features (CORRIGÉ)"""
     st.error(f"🔒 {feature_name} requires a subscription. Please upgrade your account.")
     
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     
     with col1:
         if st.button("🚀 Upgrade Now", use_container_width=True, type="primary"):
             st.session_state.page = 'dashboard'
-            st.experimental_rerun()
+            st.rerun()
     
     with col2:
         if st.button("🆓 Start Free Trial", use_container_width=True):
             st.session_state.show_signup = True
-            st.experimental_rerun()
+            st.rerun()
+    
+    with col3:
+        st.link_button("🛒 Buy NeoRen Product", NEOREN_WEBSITE, use_container_width=True)
 
 # ----------------------
-# Main Application
+# Main Application (CORRIGÉ)
 # ----------------------
 
 def main():
@@ -977,67 +1104,30 @@ def main():
     # Initialize session state
     init_session_state()
     
-    # Load authentication config
-    config = load_auth_config()
-    
-    # Create authenticator
-    authenticator = stauth.Authenticate(
-        config['credentials'],
-        config['cookie']['name'],
-        config['cookie']['key'],
-        config['cookie']['expiry_days']
-    )
-    
     # Show header
     show_header()
-    
-    # Handle authentication
-    if not st.session_state.get("authentication_status"):
-        # Show signup form if requested
-        if st.session_state.get("show_signup", False):
-            show_signup_form()
-            if st.button("← Back to Home"):
-                st.session_state.show_signup = False
-                st.experimental_rerun()
-            return
-        
-        # Show login form if requested
-        if st.session_state.get("show_login", False):
-            try:
-                name, authentication_status, username = authenticator.login('Login', 'main')
-                
-                if authentication_status == False:
-                    st.error('Username/password is incorrect')
-                elif authentication_status == None:
-                    st.warning('Please enter your username and password')
-                
-                if st.button("← Back to Home"):
-                    st.session_state.show_login = False
-                    st.experimental_rerun()
-                
-                return
-                
-            except Exception as e:
-                st.error(f"Login error: {e}")
-                return
-        
-        # Show home page for non-authenticated users
-        show_navigation()
-        show_home_page()
-        return
-    
-    # User is authenticated
-    try:
-        name, authentication_status, username = authenticator.login('Login', 'sidebar')
-    except:
-        pass
     
     # Show navigation
     show_navigation()
     
+    # Handle authentication flows
+    if st.session_state.show_signup:
+        show_signup_form()
+        if st.button("← Back to Home"):
+            st.session_state.show_signup = False
+            st.rerun()
+        return
+    
+    if st.session_state.show_login:
+        show_login_form()
+        if st.button("← Back to Home"):
+            st.session_state.show_login = False
+            st.rerun()
+        return
+    
     # Display the appropriate page based on session state
     current_page = st.session_state.page
-    username = st.session_state.get("username")
+    username = st.session_state.username
     
     if current_page == 'home':
         show_home_page()
@@ -1048,25 +1138,25 @@ def main():
     elif current_page == 'hosts':
         show_hosts_page()
     elif current_page == 'sequence':
-        if check_user_access(username, 'sequence'):
+        if st.session_state.authenticated and check_user_access(username, 'sequence'):
             st.markdown("## 🔬 Protein Sequence Analysis")
             st.info("Sequence analysis functionality will be implemented here.")
         else:
             show_restricted_feature("Sequence Analysis")
     elif current_page == 'parameters':
-        if check_user_access(username, 'parameters'):
+        if st.session_state.authenticated and check_user_access(username, 'parameters'):
             st.markdown("## ⚙️ Expression Parameters Configuration")
             st.info("Parameters configuration functionality will be implemented here.")
         else:
             show_restricted_feature("Parameters Configuration")
     elif current_page == 'optimize':
-        if check_user_access(username, 'optimize'):
+        if st.session_state.authenticated and check_user_access(username, 'optimize'):
             st.markdown("## 🎯 Expression Optimization")
             st.info("Optimization functionality will be implemented here.")
         else:
             show_restricted_feature("Expression Optimization")
     elif current_page == 'results':
-        if check_user_access(username, 'results'):
+        if st.session_state.authenticated and check_user_access(username, 'results'):
             st.markdown("## 📊 Optimization Results")
             st.info("Results visualization functionality will be implemented here.")
         else:
